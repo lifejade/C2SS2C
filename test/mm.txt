@@ -1,0 +1,20 @@
+Maximum number of CPUs:  24
+ckks parameter init end
+generated bootstrapper end
+17.420699ms
+generate Evaluator end
+N is this  :  4096
+start ntl
+2
+ppmm time :  1m9.47911366s
+start flint
+2
+ppmm time :  21.658545449s
+2046.6000288762152
+2046.6000236310065
+2046.6000349409878
+2046.6000288762152
+2046.6000236310065
+2046.6000349409878
+PASS
+ok  	github.com/lifejade/mm/test	108.960s
