@@ -71,9 +71,6 @@ func Tweak2(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 			ringQ.INTT(tmp.Value[1], tmp.Value[1])
 			ringQ.MultByMonomial(tmp.Value[0], params.MaxSlots()*2/powl*j, tmp.Value[0])
 			ringQ.MultByMonomial(tmp.Value[1], params.MaxSlots()*2/powl*j, tmp.Value[1])
-			if tmp.Level() == 0 {
-				fmt.Println("no")
-			}
 
 			ringQ.NTT(tmp.Value[0], tmp.Value[0])
 			ringQ.NTT(tmp.Value[1], tmp.Value[1])
