@@ -1,8 +1,0 @@
-Maximum number of CPUs:  24
-ckks parameter init end
-131072
-generated bootstrapper end
-1.192486867s
-generate Evaluator end
-signal: killed
-FAIL	github.com/lifejade/mm/test	159.972s

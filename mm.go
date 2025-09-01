@@ -111,7 +111,7 @@ func main() {
 		}
 	}
 
-	result := matmult.PPMM(cts, u, params, n)
+	result := matmult.PPMM_Flint(cts, u, params, n)
 
 	values := make([][]float64, n)
 	for i := range values {

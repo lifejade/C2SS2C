@@ -8,27 +8,28 @@ package cwrappingflint
 #include "flint_wrap.h"
 */
 import "C"
-import (
-	"strconv"
-)
 
-func Mult_mod_mat(A, B [][]uint64, size uint64, p uint64) [][]uint64 {
-	a := make([]C.ulonglong, size*size)
-	b := make([]C.ulonglong, size*size)
-	result := make([]C.ulonglong, size*size)
-	for i := range size {
-		for j := range size {
-			a[i*size+j] = C.ulonglong(A[i][j])
-			b[i*size+j] = C.ulonglong(B[i][j])
+func Mult_mod_mat(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
+	a := make([]C.ulonglong, size_a*size_b)
+	b := make([]C.ulonglong, size_b*size_c)
+	result := make([]C.ulonglong, size_a*size_c)
+	for i := range size_a {
+		for j := range size_b {
+			a[i*size_b+j] = C.ulonglong(A[i][j])
 		}
-
 	}
-	C.multiply_mod_matrix_flint(&a[0], &b[0], &result[0], C.ulonglong(size), C.CString(strconv.FormatUint(p, 10)))
-	res := make([][]uint64, size)
-	for i := range size {
-		res[i] = make([]uint64, size)
-		for j := range size {
-			res[i][j] = uint64(result[size*i+j])
+	for i := range size_b {
+		for j := range size_c {
+			b[i*size_c+j] = C.ulonglong(B[i][j])
+		}
+	}
+
+	C.multiply_mod_matrix_flint(&a[0], &b[0], &result[0], C.ulonglong(size_a), C.ulonglong(size_b), C.ulonglong(size_c), C.ulonglong(p))
+	res := make([][]uint64, size_a)
+	for i := range size_a {
+		res[i] = make([]uint64, size_c)
+		for j := range size_c {
+			res[i][j] = uint64(result[size_c*i+j])
 		}
 	}
 	return res
