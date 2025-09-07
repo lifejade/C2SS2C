@@ -16,7 +16,6 @@ void multiply_mod_matrix_flint(const unsigned long long *a,
                          const unsigned long long  n_c,
                          const unsigned long long p)
 {
-    /* 1. 모듈러스 파싱 (64‑bit) */
     flint_set_num_threads(omp_get_max_threads());
     /* 2. 행렬 초기화 */
     nmod_mat_t A, B, C;

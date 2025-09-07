@@ -367,7 +367,7 @@ func Test_SFLC(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            5,
+		LogN:            6,
 		LogQ:            []int{50, 50, 50, 32, 32},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
@@ -378,7 +378,7 @@ func Test_SFLC(t *testing.T) {
 		panic(err)
 	}
 
-	SF_LC, SFI_LC := matmult.GenSFMat_CL(params, []int{2, 2}, []int{2, 2})
+	SF_LC, SFI_LC := matmult.GenSFMat_CL(params, []int{2, 3}, []int{1, 2, 2})
 
 	n := params.MaxSlots()
 
@@ -440,6 +440,12 @@ func Test_SFLC(t *testing.T) {
 	fmt.Println("is same ? : ", closeMat(SF, SF_, 0.0001))
 	fmt.Println("is same ? : ", closeMat(SFI, SFI_, 0.0001))
 
+	for l := range SFI_LC {
+		for i := range SFI_LC[l] {
+			fmt.Println(SFI_LC[l][i])
+		}
+		fmt.Println()
+	}
 }
 
 func Test_C2SLC(t *testing.T) {
@@ -1128,11 +1134,12 @@ func Test_C2SLC_Opt(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            5,
+		LogN:            16,
 		LogQ:            []int{48, 40, 40, 48},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
 	}
+	CL_arr := []int{5, 5, 5}
 	//parameter init
 	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
 	if err != nil {
@@ -1158,7 +1165,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 	rlk = kgen.GenRelinearizationKeyNew(sk)
 
 	// generate keys - Rotating key
-	galEls := make([]uint64, 2*n)
+	galEls := make([]uint64, 1)
 	for i := range galEls {
 		galEls[i] = uint64(2*i + 1)
 	}
@@ -1194,12 +1201,12 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 	fmt.Println("ckks log degree : ", params.LogN())
 
-	CL_arr := []int{2, 1, 1}
 	_, SFI := matmult.GenSFMat_CL(params, CL_arr, CL_arr)
 	scale := float64(1 << 40)
 	mat0 := make([][][][][]uint64, len(SFI))
 	mat0i := make([][][][][]uint64, len(SFI))
 	mat0si := make([][][][][]uint64, len(SFI))
+	fmt.Println("check")
 
 	inter_it := n
 	for l := range SFI {
@@ -1240,7 +1247,9 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 		inter_it = inter
 	}
-
+	SFI = nil
+	runtime.GC()
+	fmt.Println("check")
 	value := make([]float64, 2*n)
 	for i := range value {
 		value[i] = 0.001 * float64(i)
@@ -1251,11 +1260,11 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
-	cts := make([]*rlwe.Ciphertext, 2*n)
-	for i := range cts {
-		cts[i] = ct.CopyNew()
+	ctT := make([]*rlwe.Ciphertext, 2*n)
+	for i := range ctT {
+		ctT[i] = ct.CopyNew()
 	}
-
+	printMemUsage()
 	res00 := make([]*rlwe.Ciphertext, 2*n)
 	res00i := make([]*rlwe.Ciphertext, 2*n)
 	res01 := make([]*rlwe.Ciphertext, 2*n)
@@ -1271,25 +1280,25 @@ func Test_C2SLC_Opt(t *testing.T) {
 	temp2_ := make([]*rlwe.Ciphertext, 2*n)
 	ctZero := matmult.CtZero(params, encoder, encryptor)
 	for i := range 2 * n {
-		res00[i] = matmult.CtZero(params, encoder, encryptor)
-		res00i[i] = matmult.CtZero(params, encoder, encryptor)
-		res01[i] = matmult.CtZero(params, encoder, encryptor)
-		res01i[i] = matmult.CtZero(params, encoder, encryptor)
+		res00[i] = ctZero.CopyNew()
+		res00i[i] = ctZero.CopyNew()
+		res01[i] = ctZero.CopyNew()
+		res01i[i] = ctZero.CopyNew()
 
-		res10[i] = matmult.CtZero(params, encoder, encryptor)
-		res10i[i] = matmult.CtZero(params, encoder, encryptor)
-		res11[i] = matmult.CtZero(params, encoder, encryptor)
-		res11i[i] = matmult.CtZero(params, encoder, encryptor)
+		res10[i] = ctZero.CopyNew()
+		res10i[i] = ctZero.CopyNew()
+		res11[i] = ctZero.CopyNew()
+		res11i[i] = ctZero.CopyNew()
 
-		temp1[i] = matmult.CtZero(params, encoder, encryptor)
-		temp1_[i] = matmult.CtZero(params, encoder, encryptor)
-		temp2[i] = matmult.CtZero(params, encoder, encryptor)
-		temp2_[i] = matmult.CtZero(params, encoder, encryptor)
+		temp1[i] = ctZero.CopyNew()
+		temp1_[i] = ctZero.CopyNew()
+		temp2[i] = ctZero.CopyNew()
+		temp2_[i] = ctZero.CopyNew()
 	}
-
+	printMemUsage()
 	fmt.Println("start c2s")
 	starttime = time.Now()
-	ctT := transpose.Transpose(cts, params, evaluator, encoder, 2*n)
+	ctT = transpose.Transpose(ctT, params, evaluator, encoder, 2*n)
 
 	ctTC := make([]*rlwe.Ciphertext, 2*n)
 	fmt.Println("ctT ctTC")
@@ -1300,7 +1309,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 			ctTC[i] = ctT[i-n].CopyNew()
 		}
 	}
-
+	printMemUsage()
 	//var res00, res01, res10, res11, res00i, res01i, res10i, res11i []*rlwe.Ciphertext
 	inter_it = n
 	for l := range len(SFI) {
@@ -1690,6 +1699,8 @@ func Test_C2SLC_Opt(t *testing.T) {
 			res11 = matmult.SubMany(m1, m2, evaluator)
 			res11i = matmult.SubMany(m3, m4, evaluator)
 
+			fmt.Println("mem")
+			printMemUsage()
 			for i := range 2 * n {
 				evaluator.Mul(res00[i], 1.0/scale, res00[i])
 				evaluator.Rescale(res00[i], res00[i])
@@ -1712,6 +1723,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 				evaluator.Rescale(res11i[i], res11i[i])
 			}
 		}
+		printMemUsage()
 		inter_it = inter
 	}
 

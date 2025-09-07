@@ -3,6 +3,7 @@ package test
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"testing"
@@ -12,7 +13,6 @@ import (
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
-	"github.com/tuneinsight/lattigo/v5/schemes/ckks"
 
 	"time"
 )
@@ -670,21 +670,13 @@ func Tweak2_check(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 }
 
 func Test_imsadprof(t *testing.T) {
-	PN16QP1761 := ckks.ParametersLiteral{
-		LogN: 16,
-		Q: []uint64{0x80000000080001, 0x2000000a0001, 0x2000000e0001, 0x1fffffc20001,
-			0x200000440001, 0x200000500001, 0x200000620001, 0x1fffff980001,
-			0x2000006a0001, 0x1fffff7e0001, 0x200000860001, 0x200000a60001,
-			0x200000aa0001, 0x200000b20001, 0x200000c80001, 0x1fffff360001,
-			0x200000e20001, 0x1fffff060001, 0x200000fe0001, 0x1ffffede0001,
-			0x1ffffeca0001, 0x1ffffeb40001, 0x200001520001, 0x1ffffe760001,
-			0x2000019a0001, 0x1ffffe640001, 0x200001a00001, 0x1ffffe520001,
-			0x200001e80001, 0x1ffffe0c0001, 0x1ffffdee0001, 0x200002480001,
-			0x1ffffdb60001, 0x200002560001},
-		P:               []uint64{0x80000000440001, 0x7fffffffba0001, 0x80000000500001, 0x7fffffffaa0001},
-		LogDefaultScale: 45,
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            16,
+		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40, 40},
+		LogP:            []int{52},
+		LogDefaultScale: 40,
 	}
-	params, _ := hefloat.NewParametersFromLiteral(hefloat.ParametersLiteral(PN16QP1761))
+	params, _ := hefloat.NewParametersFromLiteral(SchemeParams)
 	fmt.Printf("logN=%d, MaxLevel=%d, LogDefaultScale=%d (PREC mode auto)\n",
 		params.LogN(), params.MaxLevel(), params.LogDefaultScale())
 	fmt.Print(params.LogQ())
@@ -743,12 +735,12 @@ func Test_imsadprof(t *testing.T) {
 	pt := hefloat.NewPlaintext(params, params.MaxLevel())
 	pt.IsBatched = false
 
+	llen := 1 << 5
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
 	fmt.Println("size of ct : ", ct.BinarySize())
-	cts := make([]*rlwe.Ciphertext, 2*n)
-	for i := range 2 * n {
-		fmt.Println("idx : ", i)
+	cts := make([]*rlwe.Ciphertext, llen)
+	for i := range cts {
 		cts[i] = ct.CopyNew()
 	}
 	fmt.Println("ct gen end")
@@ -759,13 +751,22 @@ func Test_imsadprof(t *testing.T) {
 	// elapse = time.Since(starttime)
 	// fmt.Println(elapse)
 
-	_, SFI := matmult.GenSFMat(params)
 	scale := float64(1 << 40)
-	mat0, _, _, _ := matmult.GenC2SMat(SFI, scale, params)
+	mat0 := make([][][]uint64, len(params.Q()))
+	for l := range mat0 {
+		mat0[l] = make([][]uint64, llen)
+		for i := range mat0[l] {
+			mat0[l][i] = make([]uint64, llen)
+			for j := range mat0[l][i] {
+				mat0[l][i][j] = uint64(rand.Float64() * scale)
+			}
+		}
+	}
+	fmt.Println("mat init end")
 
 	fmt.Println("ppmm, maxlevel")
 	starttime = time.Now()
-	res0 := matmult.PPMM_Flint_CRT(cts, mat0, params, 2*n)
+	res0 := matmult.PPMM_Flint_CRT2(cts, mat0, llen, llen, 2*n, params)
 	for i := range res0 {
 		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
 		evaluator.Rescale(res0[i], res0[i])
@@ -775,7 +776,7 @@ func Test_imsadprof(t *testing.T) {
 
 	fmt.Println("ppmm, maxlevel - 1")
 	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
+	res0 = matmult.PPMM_Flint_CRT2(res0, mat0, llen, llen, 2*n, params)
 	for i := range res0 {
 		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
 		evaluator.Rescale(res0[i], res0[i])
@@ -785,7 +786,7 @@ func Test_imsadprof(t *testing.T) {
 
 	fmt.Println("ppmm, maxlevel - 2")
 	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
+	res0 = matmult.PPMM_Flint_CRT2(res0, mat0, llen, llen, 2*n, params)
 	for i := range res0 {
 		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
 		evaluator.Rescale(res0[i], res0[i])
@@ -803,36 +804,6 @@ func Test_imsadprof(t *testing.T) {
 	// transpose.Transpose(res0, params, evaluator, encoder, 2*n)
 	// elapse = time.Since(starttime)
 	// fmt.Println(elapse)
-
-	fmt.Println("ppmm, level = 3")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
-
-	fmt.Println("ppmm, level = 2")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
-
-	fmt.Println("ppmm, level = 1")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
 }
 
 func multiply(n int, a, b []*[]uint64) []*[]uint64 {
