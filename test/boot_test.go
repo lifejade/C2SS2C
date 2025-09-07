@@ -774,7 +774,7 @@ func Test_Boot(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            11,
+		LogN:            16,
 		LogQ:            []int{48, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
 		LogP:            []int{52},
 		LogDefaultScale: 40,

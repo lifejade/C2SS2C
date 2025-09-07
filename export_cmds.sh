@@ -1,4 +1,4 @@
 
 
-export PKG_CONFIG_PATH="/home/paiclab/Documents/psm/localbuild/lib/pkgconfig" \
-export LD_LIBRARY_PATH="/home/paiclab/Documents/psm/localbuild/lib:$LD_LIBRARY_PATH" \
+export PKG_CONFIG_PATH="$HOME/psm_other/localbuild/lib/pkgconfig" \
+export LD_LIBRARY_PATH="$HOME/psm_other/localbuild/lib:$LD_LIBRARY_PATH" \

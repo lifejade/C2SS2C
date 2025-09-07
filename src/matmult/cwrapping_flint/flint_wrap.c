@@ -7,6 +7,9 @@
 #include <gmp.h>
 
 #include <omp.h>   
+#include <stdio.h>
+#include <time.h>
+
 
 void multiply_mod_matrix_flint(const unsigned long long *a,
                          const unsigned long long *b,
@@ -37,8 +40,9 @@ void multiply_mod_matrix_flint(const unsigned long long *a,
             nmod_mat_set_entry(B, i, j, valB);
         }
     /* 4. 곱셈:  C = A * B  (FLINT이 내부적으로 클래식/Strassen 선택) */
+   
     nmod_mat_mul(C, A, B);
-
+    
     /* 5. 결과를 원래 배열 포맷으로 복사 */
     for (ulong i = 0; i < n_a; i++)
         for (ulong j = 0; j < n_c; j++)

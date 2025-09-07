@@ -479,8 +479,6 @@ func PPMM_Flint(cts []*rlwe.Ciphertext, u [][]uint64, params hefloat.Parameters,
 func PPMM_Flint_CRT(cts []*rlwe.Ciphertext, u [][][]uint64, params hefloat.Parameters, n int) []*rlwe.Ciphertext {
 	level := cts[0].Level() + 1
 
-	fmt.Println(level)
-
 	a := make([][][]uint64, level)
 	b := make([][][]uint64, level)
 
@@ -553,6 +551,42 @@ func PPMM_Flint_CRT2(cts []*rlwe.Ciphertext, u [][][]uint64, n_a, n_b, n_c int, 
 			result[i].Value[1].Coeffs[j] = CB[j][i]
 			params.RingQ().AtLevel(j).NTT(result[i].Value[0], result[i].Value[0])
 			params.RingQ().AtLevel(j).NTT(result[i].Value[1], result[i].Value[1])
+		}
+	}
+	return result
+}
+
+func PPMM_Flint_CRT3(cts []*rlwe.Ciphertext, u [][]uint64, n_a, n_b, n_c int, params hefloat.Parameters) []*rlwe.Ciphertext {
+	level := cts[0].Level() + 1
+
+	a := make([][][]uint64, level)
+	b := make([][][]uint64, level)
+
+	result := make([]*rlwe.Ciphertext, n_a)
+	for j := range level {
+		a[j] = make([][]uint64, n_b)
+		b[j] = make([][]uint64, n_b)
+	}
+	for i := range n_b {
+		result[i] = cts[i].CopyNew()
+		for j := range level {
+			a[j][i] = (result[i].Value[0].Coeffs[j])
+			b[j][i] = (result[i].Value[1].Coeffs[j])
+		}
+	}
+
+	CA := make([][][]uint64, level)
+	CB := make([][][]uint64, level)
+	Q := params.Q()
+	for i := range level {
+		CA[i] = cwrappingflint.Mult_mod_mat2(u[i], a[i], n_a, n_b, n_c, Q[i])
+		CB[i] = cwrappingflint.Mult_mod_mat2(u[i], b[i], n_a, n_b, n_c, Q[i])
+	}
+
+	for i := range result {
+		for j := range level {
+			result[i].Value[0].Coeffs[j] = CA[j][i]
+			result[i].Value[1].Coeffs[j] = CB[j][i]
 		}
 	}
 	return result

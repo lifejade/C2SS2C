@@ -3,6 +3,7 @@ package test
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"runtime"
 	"sync"
 	"testing"
@@ -11,8 +12,8 @@ import (
 	"github.com/lifejade/mm/src/transpose"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
+	"github.com/tuneinsight/lattigo/v5/he/hefloat/bootstrapping"
 	"github.com/tuneinsight/lattigo/v5/ring"
-	"github.com/tuneinsight/lattigo/v5/schemes/ckks"
 
 	"time"
 )
@@ -670,24 +671,65 @@ func Tweak2_check(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 }
 
 func Test_imsadprof(t *testing.T) {
-	PN16QP1761 := ckks.ParametersLiteral{
-		LogN: 16,
-		Q: []uint64{0x80000000080001, 0x2000000a0001, 0x2000000e0001, 0x1fffffc20001,
-			0x200000440001, 0x200000500001, 0x200000620001, 0x1fffff980001,
-			0x2000006a0001, 0x1fffff7e0001, 0x200000860001, 0x200000a60001,
-			0x200000aa0001, 0x200000b20001, 0x200000c80001, 0x1fffff360001,
-			0x200000e20001, 0x1fffff060001, 0x200000fe0001, 0x1ffffede0001,
-			0x1ffffeca0001, 0x1ffffeb40001, 0x200001520001, 0x1ffffe760001,
-			0x2000019a0001, 0x1ffffe640001, 0x200001a00001, 0x1ffffe520001,
-			0x200001e80001, 0x1ffffe0c0001, 0x1ffffdee0001, 0x200002480001,
-			0x1ffffdb60001, 0x200002560001},
-		P:               []uint64{0x80000000440001, 0x7fffffffba0001, 0x80000000500001, 0x7fffffffaa0001},
-		LogDefaultScale: 45,
+
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            16,
+		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40, 40},
+		LogP:            []int{52},
+		LogDefaultScale: 40,
 	}
-	params, _ := hefloat.NewParametersFromLiteral(hefloat.ParametersLiteral(PN16QP1761))
+	params, _ := hefloat.NewParametersFromLiteral(SchemeParams)
 	fmt.Printf("logN=%d, MaxLevel=%d, LogDefaultScale=%d (PREC mode auto)\n",
 		params.LogN(), params.MaxLevel(), params.LogDefaultScale())
 	fmt.Print(params.LogQ())
+
+	//====================================
+	//=== 2) BOOTSTRAPPING PARAMETERS ===
+	//====================================
+
+	// CoeffsToSlots parameters (homomorphic encoding)
+	CoeffsToSlotsParameters := hefloat.DFTMatrixLiteral{
+		Type:         hefloat.HomomorphicEncode,
+		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
+		LogSlots:     params.LogMaxSlots(),
+		LevelStart:   params.MaxLevel(),
+		Levels:       []int{1, 1, 1}, //qiCoeffsToSlots
+		LogBSGSRatio: 0,
+	}
+
+	// Parameters of the homomorphic modular reduction x mod 1
+	Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
+		LevelStart:      params.MaxLevel() - 3,
+		LogScale:        48,                  // Matches qiEvalMod
+		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
+		Mod1Degree:      24,                  // Depth 5
+		DoubleAngle:     3,                   // Depth 3
+		K:               8,                   // With EphemeralSecretWeight = 32 and 2^{15} slots, ensures < 2^{-138.7} failure probability
+		LogMessageRatio: 8,                   // q/|m| = 2^10
+		Mod1InvDegree:   0,                   // Depth 0
+	}
+
+	// SlotsToCoeffs parameters (homomorphic decoding)
+	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
+		Type:         hefloat.HomomorphicDecode,
+		LogSlots:     params.LogMaxSlots(),
+		LevelStart:   params.MaxLevel() - 11,
+		Levels:       []int{1, 1, 1}, // qiSlotsToCoeffs
+		LogBSGSRatio: 0,
+	}
+
+	// Custom bootstrapping.Parameters.
+	// All fields are public and can be manually instantiated.
+	btpParams := bootstrapping.Parameters{
+		ResidualParameters:      params,
+		BootstrappingParameters: params,
+		SlotsToCoeffsParameters: SlotsToCoeffsParameters,
+		Mod1ParametersLiteral:   Mod1ParametersLiteral,
+		CoeffsToSlotsParameters: CoeffsToSlotsParameters,
+		EphemeralSecretWeight:   32, // > 128bit secure for LogN=16 and LogQP = 115.
+		CircuitOrder:            bootstrapping.Custom,
+	}
 
 	// generate keys
 	//fmt.Println("generate keys")
@@ -732,26 +774,59 @@ func Test_imsadprof(t *testing.T) {
 	decryptor := rlwe.NewDecryptor(params, sk)
 	encoder := hefloat.NewEncoder(params)
 	evaluator := hefloat.NewEvaluator(params, evk)
+	_, _ = evaluator, decryptor
+
+	btpevk, _, _ := btpParams.GenEvaluationKeys(sk)
 	_ = decryptor
+	_ = evaluator
+	btp, err := bootstrapping.NewEvaluator(btpParams, btpevk)
+	if err != nil {
+		panic(err)
+	}
+	_ = btp
 
 	fmt.Println("generate Evaluator end")
+
+	llen := 1 << 7
+	scale := float64(1 << 40)
+	mat0 := make([][]uint64, len(params.Q()))
+	for l := range mat0 {
+		mat0[l] = make([]uint64, llen*llen)
+		for i := range llen {
+			for j := range llen {
+				mat0[l][i*llen+j] = uint64(rand.Float64() * scale)
+			}
+		}
+	}
+	llen = 1 << 8
+	mat1 := make([][]uint64, len(params.Q()))
+	for l := range mat1 {
+		mat1[l] = make([]uint64, llen*llen)
+		for i := range llen {
+			for j := range llen {
+				mat1[l][i*llen+j] = uint64(rand.Float64() * scale)
+			}
+		}
+	}
+	fmt.Println("mat init end")
+
 	value := make([]float64, 2*n)
 	for i := range value {
 		value[i] = 0.001 * float64(i)
 	}
 
-	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt := hefloat.NewPlaintext(params, 14)
 	pt.IsBatched = false
 
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
 	fmt.Println("size of ct : ", ct.BinarySize())
-	cts := make([]*rlwe.Ciphertext, 2*n)
-	for i := range 2 * n {
-		fmt.Println("idx : ", i)
+	cts := make([]*rlwe.Ciphertext, llen)
+	for i := range cts {
 		cts[i] = ct.CopyNew()
 	}
 	fmt.Println("ct gen end")
+
 	// fmt.Println("cts level :  ", cts[0].Level())
 	// fmt.Println("transpose, maxlevel")
 	// starttime = time.Now()
@@ -759,80 +834,186 @@ func Test_imsadprof(t *testing.T) {
 	// elapse = time.Since(starttime)
 	// fmt.Println(elapse)
 
-	_, SFI := matmult.GenSFMat(params)
-	scale := float64(1 << 40)
-	mat0, _, _, _ := matmult.GenC2SMat(SFI, scale, params)
-
 	fmt.Println("ppmm, maxlevel")
 	starttime = time.Now()
-	res0 := matmult.PPMM_Flint_CRT(cts, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
+	res := matmult.PPMM_Flint_CRT3(cts, mat0, llen, llen, 2*n, params)
+	for i := range llen {
+		evaluator.Mul(res[i], 1/scale, res[i])
+		evaluator.Rescale(res[i], res[i])
 	}
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
+	fmt.Println(res[0].Level())
 
-	fmt.Println("ppmm, maxlevel - 1")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
+	// fmt.Println("ppmm, maxlevel - 1")
+	// starttime = time.Now()
+	// res = matmult.PPMM_Flint_CRT3(res, mat0, llen, llen, 2*n, params)
+	// for i := range llen {
+	// 	evaluator.Mul(res[i], 1/scale, res[i])
+	// 	evaluator.Rescale(res[i], res[i])
+	// }
+	// elapse = time.Since(starttime)
+	// fmt.Println(elapse)
+	// fmt.Println(res[0].Level())
 
 	fmt.Println("ppmm, maxlevel - 2")
 	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
+	res = matmult.PPMM_Flint_CRT3(res, mat1, llen, llen, 2*n, params)
+	for i := range llen {
+		evaluator.Mul(res[i], 1/scale, res[i])
+		evaluator.Rescale(res[i], res[i])
 	}
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
+	fmt.Println(res[0].Level())
 
-	for i := range 2 * n {
-		evaluator.DropLevel(cts[i], cts[i].Level()-3)
+	// ct_temp := ct.CopyNew()
+	// starttime_ := time.Now()
+	// ct_coef, ct_coef2, _ := btp.DFTEvaluator.CoeffsToSlotsNew(ct_temp, btp.C2SDFTMatrix)
+	// elapse_ := time.Since(starttime_)
+	// fmt.Println("cts time(origin) : ", elapse_)
+
+	// starttime_ = time.Now()
+	// ct_coef, _ = btp.EvalMod(ct_coef)
+	// ct_coef2, _ = btp.EvalMod(ct_coef2)
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("eval time(origin) : ", elapse_)
+
+	// starttime_ = time.Now()
+	// res, _ := btp.DFTEvaluator.SlotsToCoeffsNew(ct_coef, ct_coef2, btp.S2CDFTMatrix)
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("stc time(origin) : ", elapse_)
+
+	// _ = res
+}
+
+func Test_imsadprof2(t *testing.T) {
+
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            13,
+		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40, 40},
+		LogP:            []int{52},
+		LogDefaultScale: 40,
+	}
+	params, _ := hefloat.NewParametersFromLiteral(SchemeParams)
+	fmt.Printf("logN=%d, MaxLevel=%d, LogDefaultScale=%d (PREC mode auto)\n",
+		params.LogN(), params.MaxLevel(), params.LogDefaultScale())
+	fmt.Println(params.LogQ())
+	fmt.Println(params.Q()[0], " ", params.Q()[1])
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	n := 1 << params.LogMaxSlots()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	_, _ = evaluator, decryptor
+
+	fmt.Println("generate Evaluator end")
+
+	llen := 1 << 13
+	scale := float64(1 << 40)
+	mat0 := make([][]uint64, len(params.Q()))
+	for l := range mat0 {
+		mat0[l] = make([]uint64, llen*llen)
+		for i := range llen {
+			for j := range llen {
+				mat0[l][i*llen+j] = uint64(rand.Float64() * scale)
+			}
+		}
+	}
+	fmt.Println("mat init end")
+
+	value := make([]float64, 2*n)
+	for i := range value {
+		value[i] = 0.001 * float64(i)
 	}
 
-	// fmt.Println("cts level :  ", res0[0].Level())
-	// fmt.Println("transpose, level = 3")
+	pt := hefloat.NewPlaintext(params, 1)
+	pt.IsBatched = false
+
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+	fmt.Println("size of ct : ", ct.BinarySize())
+	cts := make([]*rlwe.Ciphertext, llen)
+	for i := range cts {
+		cts[i] = ct.CopyNew()
+	}
+	fmt.Println("ct gen end")
+
+	// fmt.Println("cts level :  ", cts[0].Level())
+	// fmt.Println("transpose, maxlevel")
 	// starttime = time.Now()
-	// transpose.Transpose(res0, params, evaluator, encoder, 2*n)
+	// transpose.Transpose(cts, params, evaluator, encoder, 2*n)
 	// elapse = time.Since(starttime)
 	// fmt.Println(elapse)
 
-	fmt.Println("ppmm, level = 3")
+	fmt.Println("ppmm, maxlevel")
 	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
+	res := matmult.PPMM_Flint_CRT3(cts, mat0, llen, llen, 2*n, params)
+	for i := range llen {
+		evaluator.Mul(res[i], 1/scale, res[i])
+		evaluator.Rescale(res[i], res[i])
 	}
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
+	fmt.Println(res[0].Level())
 
-	fmt.Println("ppmm, level = 2")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
+	// ct_temp := ct.CopyNew()
+	// starttime_ := time.Now()
+	// ct_coef, ct_coef2, _ := btp.DFTEvaluator.CoeffsToSlotsNew(ct_temp, btp.C2SDFTMatrix)
+	// elapse_ := time.Since(starttime_)
+	// fmt.Println("cts time(origin) : ", elapse_)
 
-	fmt.Println("ppmm, level = 1")
-	starttime = time.Now()
-	res0 = matmult.PPMM_Flint_CRT(res0, mat0, params, 2*n)
-	for i := range res0 {
-		evaluator.Mul(res0[i], 1.0/(scale), res0[i])
-		evaluator.Rescale(res0[i], res0[i])
-	}
-	elapse = time.Since(starttime)
-	fmt.Println(elapse)
+	// starttime_ = time.Now()
+	// ct_coef, _ = btp.EvalMod(ct_coef)
+	// ct_coef2, _ = btp.EvalMod(ct_coef2)
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("eval time(origin) : ", elapse_)
+
+	// starttime_ = time.Now()
+	// res, _ := btp.DFTEvaluator.SlotsToCoeffsNew(ct_coef, ct_coef2, btp.S2CDFTMatrix)
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("stc time(origin) : ", elapse_)
+
+	// _ = res
 }
 
 func multiply(n int, a, b []*[]uint64) []*[]uint64 {

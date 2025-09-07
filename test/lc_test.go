@@ -1128,7 +1128,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            5,
+		LogN:            16,
 		LogQ:            []int{48, 40, 40, 48},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
@@ -1158,7 +1158,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 	rlk = kgen.GenRelinearizationKeyNew(sk)
 
 	// generate keys - Rotating key
-	galEls := make([]uint64, 2*n)
+	galEls := make([]uint64, 1)
 	for i := range galEls {
 		galEls[i] = uint64(2*i + 1)
 	}
@@ -1194,7 +1194,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 	fmt.Println("ckks log degree : ", params.LogN())
 
-	CL_arr := []int{2, 1, 1}
+	CL_arr := []int{7, 8}
 	_, SFI := matmult.GenSFMat_CL(params, CL_arr, CL_arr)
 	scale := float64(1 << 40)
 	mat0 := make([][][][][]uint64, len(SFI))
@@ -1289,8 +1289,8 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 	fmt.Println("start c2s")
 	starttime = time.Now()
-	ctT := transpose.Transpose(cts, params, evaluator, encoder, 2*n)
-
+	//ctT := transpose.Transpose(cts, params, evaluator, encoder, 2*n)
+	ctT := cts
 	ctTC := make([]*rlwe.Ciphertext, 2*n)
 	fmt.Println("ctT ctTC")
 	for i := range ctTC {
@@ -1739,9 +1739,10 @@ func Test_C2SLC_Opt(t *testing.T) {
 	res0 = matmult.PPMM_Flint(res0, matrev, params, 2*n)
 	res1 = matmult.PPMM_Flint(res1, matrev, params, 2*n)
 
-	result0 := transpose.Transpose(res0, params, evaluator, encoder, 2*n)
-	result1 := transpose.Transpose(res1, params, evaluator, encoder, 2*n)
-
+	//result0 := transpose.Transpose(res0, params, evaluator, encoder, 2*n)
+	//result1 := transpose.Transpose(res1, params, evaluator, encoder, 2*n)
+	result0 := res0
+	result1 := res1
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
 	fmt.Println(result0[0].LogScale())
