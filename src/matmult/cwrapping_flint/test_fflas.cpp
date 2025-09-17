@@ -1,3 +1,4 @@
+//go:build ignore
 #include <fflas-ffpack/fflas-ffpack.h>
 #include <givaro/modular.h>
 #include <vector>
@@ -7,9 +8,9 @@
 
 int main() {
     const size_t n_a = 1u<<13, n_b = 1u<<13, n_c = 1u<<13;
-    const uint64_t p = 17179869171ULL;
+    const uint64_t p = 786433;
 
-    // 48비트 법을 안전하게 처리하려면 __uint128_t를 컴퓨트 타입으로(권장)
+
     using Field = Givaro::Modular<uint64_t>;
     using E = Field::Element;
     Field F(p);
@@ -20,19 +21,18 @@ int main() {
 
     const E alpha = (E)1, beta = (E)0;
 
-    // 🔴 요 부분이 포인트: Winograd/Auto 말고 Classic으로 “명시”
-    FFLAS::MMHelper<Field, FFLAS::MMHelperAlgo::Winograd> mmh;
-
     std::clock_t st = std::clock();
-    FFLAS::fgemm(F,
+    for(int i = 0; i<3; i++){
+            FFLAS::fgemm(F,
                  FFLAS::FflasNoTrans, FFLAS::FflasNoTrans,
                  n_a, n_c, n_b,
                  alpha,
                  A.data(), n_b,
                  B.data(), n_c,
                  beta,
-                 C.data(), n_c,
-                 mmh);                     // ← helper를 넘겨서 Classic 강제
+                 C.data(), n_c);
+    }
+    
     std::clock_t ed = std::clock();
 
     std::printf("Elapse: %f\n", double(ed-st)/CLOCKS_PER_SEC);

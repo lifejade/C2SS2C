@@ -14,6 +14,15 @@ void multiply_mod_matrix_flint(const unsigned long long *a,
                          const unsigned long long  n_c,
                          const unsigned long long p);
 
+
+void multiply_mod_matrix_blas(const double *a,
+                         const double *b,
+                         unsigned long long *result,
+                         const unsigned long long  n_a,
+                         const unsigned long long  n_b,
+                         const unsigned long long  n_c,
+                         const unsigned long long p);
+
 #ifdef __cplusplus
 }
 #endif

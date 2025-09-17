@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <gmp.h>
+#include <cblas.h>
 
 #include <omp.h>   
 #include <stdio.h>
@@ -52,4 +53,32 @@ void multiply_mod_matrix_flint(const unsigned long long *a,
     nmod_mat_clear(A);
     nmod_mat_clear(B);
     nmod_mat_clear(C);
+}
+
+
+
+
+void multiply_mod_matrix_blas(const double *a,
+                         const double *b,
+                         unsigned long long *result,
+                         const unsigned long long  n_a,
+                         const unsigned long long  n_b,
+                         const unsigned long long  n_c,
+                         const unsigned long long p)
+{
+    double *res = (double*)malloc(sizeof(double) * n_a*n_c);
+    cblas_dgemm(
+            CblasRowMajor,   // 메모리 저장 방식 (row-major)
+            CblasNoTrans,CblasNoTrans,    // A를 전치하지 않음
+            n_a, n_c,n_b,            // 행렬 A의 크기 (m x n)
+            1,           // 스케일 값 alpha
+            a, n_b,            // 행렬 A와 leading dimension (n)
+            b, n_c,            // 벡터 x와 stride
+            0,            // 스케일 값 beta
+            res, n_c             // 결과 벡터 y와 stride
+    );
+
+    for(int i = 0; i< n_a * n_c; i++){
+        result[i] = (ulong)(res[i]) % p;
+    }
 }

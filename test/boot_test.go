@@ -775,7 +775,7 @@ func Test_Boot(t *testing.T) {
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
 		LogN:            16,
-		LogQ:            []int{48, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
+		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
 	}
@@ -795,7 +795,7 @@ func Test_Boot(t *testing.T) {
 		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
 		LogSlots:     params.LogMaxSlots(),
 		LevelStart:   params.MaxLevel(),
-		Levels:       []int{1, 1, 1}, //qiCoeffsToSlots
+		Levels:       []int{1, 1}, //qiCoeffsToSlots
 		LogBSGSRatio: 0,
 	}
 
@@ -815,8 +815,8 @@ func Test_Boot(t *testing.T) {
 	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
 		Type:         hefloat.HomomorphicDecode,
 		LogSlots:     params.LogMaxSlots(),
-		LevelStart:   params.MaxLevel() - 10,
-		Levels:       []int{1, 1, 1}, // qiSlotsToCoeffs
+		LevelStart:   params.MaxLevel() - 12,
+		Levels:       []int{1, 1}, // qiSlotsToCoeffs
 		LogBSGSRatio: 0,
 	}
 
@@ -850,7 +850,7 @@ func Test_Boot(t *testing.T) {
 	rlk = kgen.GenRelinearizationKeyNew(sk)
 
 	// generate keys - Rotating key
-	galEls := make([]uint64, 2*n)
+	galEls := make([]uint64, 2)
 	for i := range galEls {
 		galEls[i] = uint64(2*i + 1)
 	}
@@ -883,44 +883,44 @@ func Test_Boot(t *testing.T) {
 	fmt.Println("generate Evaluator end")
 	printMemUsage()
 
-	roots := ckks.GetRootsBigComplex(n<<2, params.EncodingPrecision())
-	roots_complex := make([]complex128, 4*n)
+	// roots := ckks.GetRootsBigComplex(n<<2, params.EncodingPrecision())
+	// roots_complex := make([]complex128, 4*n)
 
-	for i := range roots_complex {
-		roots_complex[i] = roots[i].Complex128()
-	}
-	fmt.Println()
+	// for i := range roots_complex {
+	// 	roots_complex[i] = roots[i].Complex128()
+	// }
+	// fmt.Println()
 
-	pow5 := make([]int, (n<<1)+1)
-	pow5[0] = 1
-	for i := 1; i < (n<<1)+1; i++ {
-		pow5[i] = pow5[i-1] * 5
-		pow5[i] &= (n << 2) - 1
-	}
+	// pow5 := make([]int, (n<<1)+1)
+	// pow5[0] = 1
+	// for i := 1; i < (n<<1)+1; i++ {
+	// 	pow5[i] = pow5[i-1] * 5
+	// 	pow5[i] &= (n << 2) - 1
+	// }
 
-	SF := make([][]complex128, n)
+	// SF := make([][]complex128, n)
 
-	for i := range SF {
-		SF[i] = make([]complex128, n)
-		for j := range SF[i] {
-			idx := (pow5[i] * j) & ((n << 2) - 1)
-			SF[i][j] = roots_complex[idx]
-		}
-	}
+	// for i := range SF {
+	// 	SF[i] = make([]complex128, n)
+	// 	for j := range SF[i] {
+	// 		idx := (pow5[i] * j) & ((n << 2) - 1)
+	// 		SF[i][j] = roots_complex[idx]
+	// 	}
+	// }
 
-	SFI := make([][]complex128, n)
-	for i := range SFI {
-		SFI[i] = make([]complex128, n)
-	}
-	for i := range SFI {
-		for j := range SFI[i] {
-			idx := (pow5[i] * j) & ((n << 2) - 1)
-			SFI[j][i] = cmplx.Conj(roots_complex[idx]) / complex((float64(n)), 0)
-		}
-	}
-	scale := float64(1 << 40)
-	mat0, mat1, mat2, mat3 := matmult.GenC2SMat(SFI, scale, params)
-	mat0_, mat1_, mat2_, mat3_ := matmult.GenS2CMat(SF, scale, params)
+	// SFI := make([][]complex128, n)
+	// for i := range SFI {
+	// 	SFI[i] = make([]complex128, n)
+	// }
+	// for i := range SFI {
+	// 	for j := range SFI[i] {
+	// 		idx := (pow5[i] * j) & ((n << 2) - 1)
+	// 		SFI[j][i] = cmplx.Conj(roots_complex[idx]) / complex((float64(n)), 0)
+	// 	}
+	// }
+	// scale := float64(1 << 40)
+	// mat0, mat1, mat2, mat3 := matmult.GenC2SMat(SFI, scale, params)
+	// mat0_, mat1_, mat2_, mat3_ := matmult.GenS2CMat(SF, scale, params)
 
 	value := make([]float64, n)
 	for i := range value {
@@ -932,69 +932,61 @@ func Test_Boot(t *testing.T) {
 
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
-	cts := make([]*rlwe.Ciphertext, 2*n)
-	for i := range cts {
-		cts[i] = ct.CopyNew()
-	}
+	// cts := make([]*rlwe.Ciphertext, 2*n)
+	// for i := range cts {
+	// 	cts[i] = ct.CopyNew()
+	// }
 
-	fmt.Println("gen cts & mats")
-	printMemUsage()
+	// fmt.Println("gen cts & mats")
+	// printMemUsage()
 
+	// starttime_ := time.Now()
+	// cts1_, cts2_ := matmult.C2S_OnceMul(cts, params, evaluator, encoder, mat0, mat1, mat2, mat3, scale)
+	// elapse_ := time.Since(starttime_)
+	// fmt.Println("cts time : ", elapse_)
+	// fmt.Println("ckeck cts")
+	// printMemUsage()
+
+	// starttime_ = time.Now()
+	// for i := range cts1_ {
+	// 	cts1_[i], _ = btp.EvalMod(cts1_[i])
+	// }
+	// for i := range cts2_ {
+	// 	cts2_[i], _ = btp.EvalMod(cts2_[i])
+	// }
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("eval time : ", elapse_)
+
+	// starttime_ = time.Now()
+	// res := matmult.S2C_OnceMul(cts1_, cts2_, params, evaluator, encoder, mat0_, mat1_, mat2_, mat3_, scale)
+	// elapse_ = time.Since(starttime_)
+	// fmt.Println("stc time : ", elapse_)
+	// fmt.Println("ckeck stc")
+	// printMemUsage()
+	// _ = res
+
+	// res = nil
+	// cts1_ = nil
+	// cts2_ = nil
+	// mat0, mat1, mat2, mat3, mat0_, mat1_, mat2_, mat3_ = nil, nil, nil, nil, nil, nil, nil, nil
+	// printMemUsage()
+
+	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
+	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
 	starttime_ := time.Now()
-	cts1_, cts2_ := matmult.C2S_OnceMul(cts, params, evaluator, encoder, mat0, mat1, mat2, mat3, scale)
+	ct, _, _ = btp.DFTEvaluator.CoeffsToSlotsNew(ct, btp.C2SDFTMatrix)
 	elapse_ := time.Since(starttime_)
-	fmt.Println("cts time : ", elapse_)
-	fmt.Println("ckeck cts")
-	printMemUsage()
-
+	fmt.Println("cts time(origin) : ", (elapse_ * (1 << 16)).Seconds())
 	starttime_ = time.Now()
-	for i := range cts1_ {
-		cts1_[i], _ = btp.EvalMod(cts1_[i])
-	}
-	for i := range cts2_ {
-		cts2_[i], _ = btp.EvalMod(cts2_[i])
-	}
+	ct, _ = btp.EvalMod(ct)
 	elapse_ = time.Since(starttime_)
-	fmt.Println("eval time : ", elapse_)
+	fmt.Println("eval time(origin) : ", (elapse_ * (1 << 16) * 2).Seconds())
 
+	evaluator.DropLevel(ct, 2)
 	starttime_ = time.Now()
-	res := matmult.S2C_OnceMul(cts1_, cts2_, params, evaluator, encoder, mat0_, mat1_, mat2_, mat3_, scale)
+	ct, _ = btp.DFTEvaluator.SlotsToCoeffsNew(ct, nil, btp.S2CDFTMatrix)
 	elapse_ = time.Since(starttime_)
-	fmt.Println("stc time : ", elapse_)
-	fmt.Println("ckeck stc")
-	printMemUsage()
-	_ = res
-
-	res = nil
-	cts1_ = nil
-	cts2_ = nil
-	mat0, mat1, mat2, mat3, mat0_, mat1_, mat2_, mat3_ = nil, nil, nil, nil, nil, nil, nil, nil
-	printMemUsage()
-
-	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
-	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
-
-	starttime_ = time.Now()
-	cts2 := make([]*rlwe.Ciphertext, 2*n)
-	for i := range cts2 {
-		cts2[i], _, _ = btp.DFTEvaluator.CoeffsToSlotsNew(cts[i], btp.C2SDFTMatrix)
-	}
-	elapse_ = time.Since(starttime_)
-	fmt.Println("cts time(origin) : ", elapse_)
-
-	starttime_ = time.Now()
-	for i := range cts2 {
-		cts2[i], _ = btp.EvalMod(cts2[i])
-	}
-	elapse_ = time.Since(starttime_)
-	fmt.Println("eval time(origin) : ", elapse_)
-
-	starttime_ = time.Now()
-	for i := range cts2 {
-		cts2[i], _ = btp.DFTEvaluator.SlotsToCoeffsNew(cts[i], nil, btp.S2CDFTMatrix)
-	}
-	elapse_ = time.Since(starttime_)
-	fmt.Println("stc time(origin) : ", elapse_)
+	fmt.Println("stc time(origin) : ", (elapse_ * (1 << 16)).Seconds())
 }
 
 func printMemUsage() {

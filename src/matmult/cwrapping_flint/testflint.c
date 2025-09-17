@@ -1,3 +1,4 @@
+//go:build ignore
 #include <flint/flint.h>
 #include <flint/nmod_mat.h>
 #include <stdlib.h>
@@ -17,8 +18,8 @@ int main(void)
     int n_a = 1 << 13;
     int n_b = 1 << 13;
     int n_c = 1 << 13;
-    unsigned long long p = 281474976694273;
-    // unsigned long long p2 = 1099511480321;
+    //48bit
+    unsigned long long p = 242957446545409;
     
     unsigned long long *a = (unsigned long long *)malloc(sizeof(unsigned long long) * n_a*n_b);
     unsigned long long *b = (unsigned long long *)malloc(sizeof(unsigned long long) * n_b*n_c);
@@ -79,14 +80,10 @@ int main(void)
     //         nmod_mat_set_entry(B2, i, j, valB);
     //     }
     /* 4. 곱셈:  C = A * B  (FLINT이 내부적으로 클래식/Strassen 선택) */
-    
     nmod_mat_mul(C, A, B);
     // nmod_mat_mul(C2, A2, B2);
 
-    /* 5. 결과를 원래 배열 포맷으로 복사 */
-    for (ulong i = 0; i < n_a; i++)
-        for (ulong j = 0; j < n_c; j++)
-            result[i * n_c + j] = nmod_mat_entry(C, i, j);
+
 
     // for (ulong i = 0; i < n_a; i++)
     //     for (ulong j = 0; j < n_c; j++)
@@ -95,9 +92,12 @@ int main(void)
     
     clock_t end = clock();
     double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Elapse : %f ", cpu_time_used);
-    
-    
+    printf("Elapse : %f\n ", cpu_time_used);
+        for (ulong i = 0; i < n_a; i++)
+        for (ulong j = 0; j < n_c; j++)
+            result[i * n_c + j] = nmod_mat_entry(C, i, j);
+        /* 5. 결과를 원래 배열 포맷으로 복사 */
+
         // 7) 정리
     nmod_mat_clear(A);
     nmod_mat_clear(B);

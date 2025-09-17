@@ -65,16 +65,47 @@ func FindNTTPrime2(bitLen int, modulus uint64, trials, count int) []*big.Int {
 	return result
 }
 
+// bits 길이의 소수를 생성한다 (crypto 수준의 난수 사용).
+func genPrime(bits int) (*big.Int, error) {
+	if bits < 2 {
+		return nil, fmt.Errorf("bits는 2 이상이어야 합니다")
+	}
+	// rand.Prime은 정확히 bits 비트 길이를 가진 소수를 반환한다.
+	return rand.Prime(rand.Reader, bits)
+}
+func Test_PrimeNonNTT(t *testing.T) {
+	k := 70
+	bits := 24
+	seen := make(map[string]struct{}, k)
+	out := make([]*big.Int, 0, k)
+
+	// 작은 비트 길이에 대해 k가 비현실적으로 큰 경우 무한루프 방지
+	// 중복 시도 허용치를 넉넉히 잡습니다.
+
+	for len(out) < k {
+		p, _ := genPrime(bits)
+		key := p.Text(16) // 문자열 키로 중복 체크
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, p)
+	}
+	for i := range out {
+		fmt.Print(out[i], ",")
+	}
+}
+
 func Test_Prime(t *testing.T) {
 	const (
-		logQ       = 48
-		logN       = 11 // N = 2¹¹ = 2048
-		mod1InvDeg = 0  // Mod1InvDegree
+		logQ       = 24
+		logN       = 16
+		mod1InvDeg = 0 // Mod1InvDegree
 	)
-	nthRootLog := logN + mod1InvDeg          // = 15
-	modulus := uint64(1) << (nthRootLog + 1) // 2*NthRoot = 2^(15+1)
+	nthRootLog := logN + mod1InvDeg
+	modulus := uint64(1) << (nthRootLog + 1)
 
-	k := 8
+	k := 10
 	Q := make([]uint64, 0, k)
 	for len(Q) < k {
 		if p := FindNTTPrime(logQ, modulus, 0); p != nil {
@@ -88,14 +119,14 @@ func Test_Prime(t *testing.T) {
 
 func Test_Prime2(t *testing.T) {
 	const (
-		logQ       = 32 //
-		logN       = 11 // N = 2¹¹ = 2048
-		mod1InvDeg = 4  // Mod1InvDegree
+		logQ       = 20 //
+		logN       = 16 // N = 2¹¹ = 2048
+		mod1InvDeg = 0  // Mod1InvDegree
 	)
 	nthRootLog := logN + mod1InvDeg          // = 15
 	modulus := uint64(1) << (nthRootLog + 1) // 2*NthRoot = 2^(15+1)
 	fmt.Println(modulus)
 	// 26-bit 소수 2개 뽑기
-	Q := FindNTTPrime2(26, modulus, 0, 4)
+	Q := FindNTTPrime2(logQ, modulus, 0, 6)
 	fmt.Println(Q)
 }
