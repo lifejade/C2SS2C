@@ -597,9 +597,6 @@ func PPMM_Blas_CRT(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n
 	a := make([][][]uint64, level)
 	for j := range level {
 		a[j] = make([][]uint64, n_b)
-		for i := range n_b {
-			a[j][i] = make([]uint64, n_c)
-		}
 	}
 
 	for i := range n_b {

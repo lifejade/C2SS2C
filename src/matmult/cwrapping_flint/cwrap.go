@@ -9,6 +9,8 @@ package cwrappingflint
 */
 import "C"
 
+import "unsafe"
+
 func Mult_mod_mat(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
 	a := make([]C.ulonglong, size_a*size_b)
 	b := make([]C.ulonglong, size_b*size_c)
@@ -62,27 +64,48 @@ func Mult_mod_mat2(A []uint64, B [][]uint64, size_a, size_b, size_c int, p uint6
 }
 
 func Mult_mod_mat_Blas(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
-	a := make([]C.double, size_a*size_b)
-	b := make([]C.double, size_b*size_c)
-	result := make([]C.ulonglong, size_a*size_c)
-	for i := range size_a {
-		for j := range size_b {
-			a[i*size_b+j] = C.double(A[i][j])
-		}
-	}
-	for i := range size_b {
-		for j := range size_c {
-			b[i*size_c+j] = C.double(B[i][j])
-		}
-	}
 
-	C.multiply_mod_matrix_blas(&a[0], &b[0], &result[0], C.ulonglong(size_a), C.ulonglong(size_b), C.ulonglong(size_c), C.ulonglong(p))
-	res := make([][]uint64, size_a)
-	for i := range size_a {
-		res[i] = make([]uint64, size_c)
-		for j := range size_c {
-			res[i][j] = uint64(result[size_c*i+j])
-		}
-	}
-	return res
+
+    // --- 평탄화 (uint64 -> float64) ---
+    a64 := make([]float64, size_a*size_b)
+    for i := 0; i < size_a; i++ {
+        row := A[i]
+        base := i * size_b
+        for j := 0; j < size_b; j++ {
+            a64[base+j] = float64(row[j])
+        }
+    }
+
+    b64 := make([]float64, size_b*size_c)
+    for i := 0; i < size_b; i++ {
+        row := B[i]
+        base := i * size_c
+        for j := 0; j < size_c; j++ {
+            b64[base+j] = float64(row[j])
+        }
+    }
+
+    // --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+    // C가 결과를 out에 써줌
+    resultFlat := make([]uint64, size_a*size_c)
+
+    // --- C 호출 (포인터 캐스팅만) ---
+    C.multiply_mod_matrix_blas(
+        (*C.double)(unsafe.Pointer(&a64[0])),
+        (*C.double)(unsafe.Pointer(&b64[0])),
+        (*C.ulonglong)(unsafe.Pointer(&resultFlat[0])),
+        C.ulonglong(size_a),
+        C.ulonglong(size_b),
+        C.ulonglong(size_c),
+        C.ulonglong(p),
+    )
+
+    // --- 2D로 되돌리기 ---
+    res := make([][]uint64, size_a)
+    for i := 0; i < size_a; i++ {
+        row := make([]uint64, size_c)
+        copy(row, resultFlat[i*size_c:(i+1)*size_c])
+        res[i] = row
+    }
+    return res
 }

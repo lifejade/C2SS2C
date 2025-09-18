@@ -197,9 +197,153 @@ func Test_ModSwitch(t *testing.T) {
 	fmt.Println(ringP.ModulusAtLevel[5])
 }
 
-func Test_ModSwitch2(t *testing.T) {
+func Test_ModSwitchTime(t *testing.T) {
 	//CPU full power
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		// logN = 13, full slots
+		// # special modulus = 1
+		// # available levels = 4
+		LogN:            16,
+		LogQ:            []int{48, 48, 48},
+		LogP:            []int{50},
+		Xs:              ring.Ternary{H: 256},
+		LogDefaultScale: 40,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	n := params.N()
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	fmt.Println("N is this  : ", n)
+	value := make([]float64, n)
+	for i, _ := range value {
+		value[i] = 0.1
+	}
+
+	size := 1 << 5
+	scale := float64(1 << 5)
+	u := make([][][]uint64, 7)
+	for i := range u {
+		u[i] = make([][]uint64, size)
+		for j := range u[i] {
+			u[i][j] = make([]uint64, size)
+			for k := range u[i][j] {
+				u[i][j][k] = uint64(0.2 * scale)
+			}
+		}
+	}
+
+	pt := hefloat.NewPlaintext(params, 2)
+	pt.IsBatched = false
+	//P := []uint64{23068673, 27918337, 20316161, 28704769, 28311553, 22806529}
+	P := []uint64{12451841, 14155777, 13631489, 16384001, 13238273, 8650753, 16121857}
+
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+	ringQ := params.RingQ().AtLevel(ct.Level())
+	ringP, _ := ring.NewRing(params.N(), P)
+
+	be := ring.NewBasisExtender(ringQ, ringP)
+
+	rings := make([]ring.Poly, size)
+	for i := range rings {
+		rings[i] = ringP.NewPoly()
+	}
+
+	res := make([]ring.Poly, size)
+	for i := range rings {
+		res[i] = ringP.NewPoly()
+	}
+	ctIn := ct.CopyNew()
+	ringQ.INTT(ctIn.Value[0], ctIn.Value[0])
+	ringQ.INTT(ctIn.Value[1], ctIn.Value[1])
+
+	starttime = time.Now()
+	for idx := range 2 {
+
+		for i := range rings {
+			be.ModUpQtoP(2, 6, ctIn.Value[idx], rings[i])
+		}
+		starttime_ := time.Now()
+		matmult.PPMM_Blas_CRT(rings, u, params, size, size, params.N(), 7, ringP, rings)
+		elapse_ := time.Since(starttime_)
+		fmt.Println("PPMM Time : ", elapse_)
+
+		be.ModUpPtoQ(6, 2, rings[0], ctIn.Value[idx])
+	}
+	elapse = time.Since(starttime)
+	fmt.Println(elapse)
+	Mul_(evaluator, ctIn, 1/scale, ctIn)
+	Rescale_NonNTT(evaluator, ctIn, ctIn)
+
+	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[0], ctIn.Value[0])
+	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[1], ctIn.Value[1])
+
+	values := make([]float64, n)
+
+	dept := decryptor.DecryptNew(ctIn)
+	encoder.Decode(dept, values)
+
+	fmt.Println(values)
+}
+
+func Test_ModSwitch2(t *testing.T) {
+	//CPU full power
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 
 	//ckks parameter init
@@ -308,13 +452,14 @@ func Test_ModSwitch2(t *testing.T) {
 		if startLevel%2 == 1 {
 			size = 1 << 7
 		}
+
 		u := make([][][]uint64, PLevel+1)
 		for i := range u {
 			u[i] = make([][]uint64, size)
 			for j := range u[i] {
 				u[i][j] = make([]uint64, size)
 				for k := range u[i][j] {
-					u[i][j][k] = uint64(0.125 * scale)
+					u[i][j][k] = uint64(0.125*scale) % P[i]
 				}
 			}
 		}
@@ -453,7 +598,7 @@ func Test_ModSwitch_Opt(t *testing.T) {
 	fmt.Println("len P", len(P))
 	startLevels := []int{2}
 	levelstep := 2
-	sizes := []int{1 << 10, 1 << 10}
+	sizes := []int{1 << 7, 1 << 8}
 	scale := float64(1 << 30)
 
 	for l := range startLevels {
@@ -552,7 +697,7 @@ func Test_ModSwitch_Opt(t *testing.T) {
 
 func Test_ModSwitch_Opt2(t *testing.T) {
 	//CPU full power
-	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 
 	//ckks parameter init
@@ -630,9 +775,9 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 	//24bit
 	P := []uint64{14624959, 15092711, 16654291, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841, 13097699, 13844113, 14952997, 14788847, 15081413, 15146069, 16552919, 15883789, 13399327, 13466251, 16003619, 14104499, 15536119, 16667741, 12891587, 13922939, 13375783, 14587351, 15993793, 13077359, 13881059, 14541113, 16076227, 15457859, 13534247, 16327063, 16321843, 15841601, 12901619, 12990127, 14647547, 13025123, 13413511, 15537433, 13879141, 15439847, 13149043}
 	P = P[:40]
-	startLevels := []int{3}
-	levelstep := 3
-	sizes := []int{1 << 5, 1 << 5, 1 << 5}
+	startLevels := []int{2}
+	levelstep := 2
+	sizes := []int{1 << 8, 1 << 7}
 	scale := float64(1 << 30)
 	for l := range startLevels {
 		fmt.Println("//////////////////////////////////////////////////////////////")
@@ -653,7 +798,7 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 			PLevel++
 		}
 		fmt.Println(PLevel)
-		PLevel += 3
+		PLevel += 1
 
 		sc := rlwe.NewScale(1)
 		for i := range levelstep {
@@ -678,7 +823,7 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 				for j := range u[i] {
 					u[i][j] = make([]uint64, size)
 					for k := range u[i][j] {
-						u[i][j][k] = uint64(0.5 * scale)
+						u[i][j][k] = uint64(0.5*scale) % ringP.ModuliChain()[i]
 					}
 				}
 			}
@@ -742,11 +887,11 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 				if step == 0 {
 
 					fmt.Println("steptime : ", steptime)
-					steptime = steptime * 8 * (1 << 10)
+					steptime = steptime * 8 * (1 << 7)
 					fmt.Println("steptotaltime : ", steptime)
 				} else {
 					fmt.Println("steptime : ", steptime)
-					steptime = steptime * 8 * (1 << 10)
+					steptime = steptime * 8 * (1 << 8)
 					fmt.Println("steptotaltime : ", steptime)
 				}
 			}

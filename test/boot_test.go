@@ -771,7 +771,7 @@ func Test_S2C(t *testing.T) {
 
 func Test_Boot(t *testing.T) {
 	//CPU full power
-	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
 		LogN:            16,
@@ -795,13 +795,13 @@ func Test_Boot(t *testing.T) {
 		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
 		LogSlots:     params.LogMaxSlots(),
 		LevelStart:   params.MaxLevel(),
-		Levels:       []int{1, 1}, //qiCoeffsToSlots
+		Levels:       []int{1, 1,1}, //qiCoeffsToSlots
 		LogBSGSRatio: 0,
 	}
 
 	// Parameters of the homomorphic modular reduction x mod 1
 	Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
-		LevelStart:      params.MaxLevel() - 2,
+		LevelStart:      params.MaxLevel() - 3,
 		LogScale:        48,                  // Matches qiEvalMod
 		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
 		Mod1Degree:      24,                  // Depth 5
@@ -815,8 +815,8 @@ func Test_Boot(t *testing.T) {
 	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
 		Type:         hefloat.HomomorphicDecode,
 		LogSlots:     params.LogMaxSlots(),
-		LevelStart:   params.MaxLevel() - 12,
-		Levels:       []int{1, 1}, // qiSlotsToCoeffs
+		LevelStart:   params.MaxLevel() - 11,
+		Levels:       []int{1, 1,1}, // qiSlotsToCoeffs
 		LogBSGSRatio: 0,
 	}
 
@@ -974,17 +974,18 @@ func Test_Boot(t *testing.T) {
 	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
 	fmt.Println("////////////////////////////////////////////////////////////////////////////////////////////////////////////")
 	starttime_ := time.Now()
-	ct, _, _ = btp.DFTEvaluator.CoeffsToSlotsNew(ct, btp.C2SDFTMatrix)
+	ct_, ct2_, _ := btp.DFTEvaluator.CoeffsToSlotsNew(ct, btp.C2SDFTMatrix)
 	elapse_ := time.Since(starttime_)
 	fmt.Println("cts time(origin) : ", (elapse_ * (1 << 16)).Seconds())
 	starttime_ = time.Now()
-	ct, _ = btp.EvalMod(ct)
+	ct_, _ = btp.EvalMod(ct_)
+	ct2_, _ = btp.EvalMod(ct2_)
 	elapse_ = time.Since(starttime_)
-	fmt.Println("eval time(origin) : ", (elapse_ * (1 << 16) * 2).Seconds())
+	fmt.Println("eval time(origin) : ", (elapse_ * (1 << 16)).Seconds())
 
-	evaluator.DropLevel(ct, 2)
+	// evaluator.DropLevel(ct, 2)
 	starttime_ = time.Now()
-	ct, _ = btp.DFTEvaluator.SlotsToCoeffsNew(ct, nil, btp.S2CDFTMatrix)
+	ct, _ = btp.DFTEvaluator.SlotsToCoeffsNew(ct_, ct2_, btp.S2CDFTMatrix)
 	elapse_ = time.Since(starttime_)
 	fmt.Println("stc time(origin) : ", (elapse_ * (1 << 16)).Seconds())
 }
