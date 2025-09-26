@@ -65,7 +65,7 @@ int main(void)
             mp_limb_t valB = (mp_limb_t)(b[i * n_c + j] % p);
             nmod_mat_set_entry(B, i, j, valB);
         }
-    clock_t start = clock();
+    clock_t start = clock_gettime(CLOCK_MONOTONIC);
 
     // ////////////////////////
     // for (ulong i = 0; i < n_a; i++)
@@ -90,7 +90,7 @@ int main(void)
     //         result[i * n_c + j] = nmod_mat_entry(C2, i, j);
 
     
-    clock_t end = clock();
+    clock_t end = clock_gettime(CLOCK_MONOTONIC);
     double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
     printf("Elapse : %f\n ", cpu_time_used);
         for (ulong i = 0; i < n_a; i++)
