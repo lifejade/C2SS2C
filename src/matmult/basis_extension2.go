@@ -275,12 +275,12 @@ func reconstructRNS(start, end, x int, p [][]uint64, y0, y1, y2, y3, y4, y5, y6,
 		pTmp := (*[8]uint64)(unsafe.Pointer(&p[i][x]))
 
 		y0[j] = ring.MRed(pTmp[0], qoverqiinvqi, qi, qiInv)
-		y1[j] = ring.MRed(pTmp[1], qoverqiinvqi, qi, qiInv)
-		y2[j] = ring.MRed(pTmp[2], qoverqiinvqi, qi, qiInv)
-		y3[j] = ring.MRed(pTmp[3], qoverqiinvqi, qi, qiInv)
 		y4[j] = ring.MRed(pTmp[4], qoverqiinvqi, qi, qiInv)
+		y1[j] = ring.MRed(pTmp[1], qoverqiinvqi, qi, qiInv)
 		y5[j] = ring.MRed(pTmp[5], qoverqiinvqi, qi, qiInv)
+		y2[j] = ring.MRed(pTmp[2], qoverqiinvqi, qi, qiInv)
 		y6[j] = ring.MRed(pTmp[6], qoverqiinvqi, qi, qiInv)
+		y3[j] = ring.MRed(pTmp[3], qoverqiinvqi, qi, qiInv)
 		y7[j] = ring.MRed(pTmp[7], qoverqiinvqi, qi, qiInv)
 	}
 }
@@ -440,11 +440,25 @@ func bredaddlazy(x, q uint64, u uint64) uint64 {
 	s0, _ := bits.Mul64(x, u)
 	return x - s0*q
 }
+func montLazyAdd(hi, lo, si, q, qInv uint64) uint64 {
+	// t = (lo * qInv) * q;  hhi = high64(t)
+	hhi, _ := bits.Mul64(lo*qInv, q)
+	x := hi - hhi + q + si
+	if x >= q {
+		x -= q
+	}
+	return x
+}
 
 // Caution, returns the values in [0, 2q-1]
 func multSum2(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[32]uint64, q, qInv uint64, bredP uint64, alphaimodp []uint64, betaioverqi []float64) {
-	var mhi, mlo, c, qqip uint64
-
+	var qqip uint64
+	muladd64 := func(y, qqip uint64) (rlo, rhi uint64) {
+		mhi, mlo := bits.Mul64(y, qqip)
+		rlo, c := bits.Add64(rlo, mlo, 0)
+		rhi += mhi + c
+		return
+	}
 	_ = alphaimodp[level]
 	_ = betaioverqi[level]
 	_ = (*y0)[level]
@@ -462,34 +476,34 @@ func multSum2(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y
 		beta := betaioverqi[i]
 
 		s[0] = math.FMA(float64(y0[i]), beta, s[0])
-		s[1] = math.FMA(float64(y1[i]), beta, s[1])
-		s[2] = math.FMA(float64(y2[i]), beta, s[2])
-		s[3] = math.FMA(float64(y3[i]), beta, s[3])
 		s[4] = math.FMA(float64(y4[i]), beta, s[4])
+		s[1] = math.FMA(float64(y1[i]), beta, s[1])
 		s[5] = math.FMA(float64(y5[i]), beta, s[5])
+		s[2] = math.FMA(float64(y2[i]), beta, s[2])
 		s[6] = math.FMA(float64(y6[i]), beta, s[6])
+		s[3] = math.FMA(float64(y3[i]), beta, s[3])
 		s[7] = math.FMA(float64(y7[i]), beta, s[7])
 	}
 	var si [8]uint64
 
 	si[0] = bredaddlazy(uint64(s[0]+0.5), q, bredP)
-	si[1] = bredaddlazy(uint64(s[1]+0.5), q, bredP)
-	si[2] = bredaddlazy(uint64(s[2]+0.5), q, bredP)
-	si[3] = bredaddlazy(uint64(s[3]+0.5), q, bredP)
 	si[4] = bredaddlazy(uint64(s[4]+0.5), q, bredP)
+	si[1] = bredaddlazy(uint64(s[1]+0.5), q, bredP)
 	si[5] = bredaddlazy(uint64(s[5]+0.5), q, bredP)
+	si[2] = bredaddlazy(uint64(s[2]+0.5), q, bredP)
 	si[6] = bredaddlazy(uint64(s[6]+0.5), q, bredP)
+	si[3] = bredaddlazy(uint64(s[3]+0.5), q, bredP)
 	si[7] = bredaddlazy(uint64(s[7]+0.5), q, bredP)
 
 	qqip = alphaimodp[0]
 
 	rhi[0], rlo[0] = bits.Mul64(y0[0], qqip)
-	rhi[1], rlo[1] = bits.Mul64(y1[0], qqip)
-	rhi[2], rlo[2] = bits.Mul64(y2[0], qqip)
-	rhi[3], rlo[3] = bits.Mul64(y3[0], qqip)
 	rhi[4], rlo[4] = bits.Mul64(y4[0], qqip)
+	rhi[1], rlo[1] = bits.Mul64(y1[0], qqip)
 	rhi[5], rlo[5] = bits.Mul64(y5[0], qqip)
+	rhi[2], rlo[2] = bits.Mul64(y2[0], qqip)
 	rhi[6], rlo[6] = bits.Mul64(y6[0], qqip)
+	rhi[3], rlo[3] = bits.Mul64(y3[0], qqip)
 	rhi[7], rlo[7] = bits.Mul64(y7[0], qqip)
 
 	// Accumulates the sum on uint128 and does a lazy montgomery reduction at the end
@@ -497,54 +511,29 @@ func multSum2(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y
 
 		qqip = alphaimodp[i]
 
-		mhi, mlo = bits.Mul64(y0[i], qqip)
-		rlo[0], c = bits.Add64(rlo[0], mlo, 0)
-		rhi[0] += mhi + c
+		rlo[0], rhi[0] = muladd64(y0[i], qqip)
 
-		mhi, mlo = bits.Mul64(y1[i], qqip)
-		rlo[1], c = bits.Add64(rlo[1], mlo, 0)
-		rhi[1] += mhi + c
+		rlo[4], rhi[4] = muladd64(y4[i], qqip)
 
-		mhi, mlo = bits.Mul64(y2[i], qqip)
-		rlo[2], c = bits.Add64(rlo[2], mlo, 0)
-		rhi[2] += mhi + c
+		rlo[1], rhi[1] = muladd64(y1[i], qqip)
 
-		mhi, mlo = bits.Mul64(y3[i], qqip)
-		rlo[3], c = bits.Add64(rlo[3], mlo, 0)
-		rhi[3] += mhi + c
+		rlo[5], rhi[5] = muladd64(y5[i], qqip)
 
-		mhi, mlo = bits.Mul64(y4[i], qqip)
-		rlo[4], c = bits.Add64(rlo[4], mlo, 0)
-		rhi[4] += mhi + c
+		rlo[2], rhi[2] = muladd64(y2[i], qqip)
 
-		mhi, mlo = bits.Mul64(y5[i], qqip)
-		rlo[5], c = bits.Add64(rlo[5], mlo, 0)
-		rhi[5] += mhi + c
+		rlo[6], rhi[6] = muladd64(y6[i], qqip)
 
-		mhi, mlo = bits.Mul64(y6[i], qqip)
-		rlo[6], c = bits.Add64(rlo[6], mlo, 0)
-		rhi[6] += mhi + c
+		rlo[3], rhi[3] = muladd64(y3[i], qqip)
 
-		mhi, mlo = bits.Mul64(y7[i], qqip)
-		rlo[7], c = bits.Add64(rlo[7], mlo, 0)
-		rhi[7] += mhi + c
+		rlo[7], rhi[7] = muladd64(y7[i], qqip)
 	}
 
-	montLazyAdd := func(hi, lo, si, q, qInv uint64) uint64 {
-		// t = (lo * qInv) * q;  hhi = high64(t)
-		hhi, _ := bits.Mul64(lo*qInv, q)
-		x := hi - hhi + q + si
-		if x >= q {
-			x -= q
-		}
-		return x
-	}
 	res[0] = montLazyAdd(rhi[0], rlo[0], si[0], q, qInv)
-	res[1] = montLazyAdd(rhi[1], rlo[1], si[1], q, qInv)
-	res[2] = montLazyAdd(rhi[2], rlo[2], si[2], q, qInv)
-	res[3] = montLazyAdd(rhi[3], rlo[3], si[3], q, qInv)
 	res[4] = montLazyAdd(rhi[4], rlo[4], si[4], q, qInv)
+	res[1] = montLazyAdd(rhi[1], rlo[1], si[1], q, qInv)
 	res[5] = montLazyAdd(rhi[5], rlo[5], si[5], q, qInv)
+	res[2] = montLazyAdd(rhi[2], rlo[2], si[2], q, qInv)
 	res[6] = montLazyAdd(rhi[6], rlo[6], si[6], q, qInv)
+	res[3] = montLazyAdd(rhi[3], rlo[3], si[3], q, qInv)
 	res[7] = montLazyAdd(rhi[7], rlo[7], si[7], q, qInv)
 }
