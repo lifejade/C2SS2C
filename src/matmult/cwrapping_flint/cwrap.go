@@ -9,7 +9,9 @@ package cwrappingflint
 */
 import "C"
 
-import "unsafe"
+import (
+	"unsafe"
+)
 
 func Mult_mod_mat(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
 	a := make([]C.ulonglong, size_a*size_b)
@@ -64,48 +66,148 @@ func Mult_mod_mat2(A []uint64, B [][]uint64, size_a, size_b, size_c int, p uint6
 }
 
 func Mult_mod_mat_Blas(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
+	// --- 평탄화 (uint64 -> float64) ---
+	a64 := make([]float64, size_a*size_b)
+	for i := 0; i < size_a; i++ {
+		row := A[i]
+		base := i * size_b
+		for j := 0; j < size_b; j++ {
+			a64[base+j] = float64(row[j])
+		}
+	}
 
+	b64 := make([]float64, size_b*size_c)
+	for i := 0; i < size_b; i++ {
+		row := B[i]
+		base := i * size_c
+		for j := 0; j < size_c; j++ {
+			b64[base+j] = float64(row[j])
+		}
+	}
 
-    // --- 평탄화 (uint64 -> float64) ---
-    a64 := make([]float64, size_a*size_b)
-    for i := 0; i < size_a; i++ {
-        row := A[i]
-        base := i * size_b
-        for j := 0; j < size_b; j++ {
-            a64[base+j] = float64(row[j])
-        }
-    }
+	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+	// C가 결과를 out에 써줌
+	resultFlat := make([]uint64, size_a*size_c)
 
-    b64 := make([]float64, size_b*size_c)
-    for i := 0; i < size_b; i++ {
-        row := B[i]
-        base := i * size_c
-        for j := 0; j < size_c; j++ {
-            b64[base+j] = float64(row[j])
-        }
-    }
+	// --- C 호출 (포인터 캐스팅만) ---
+	C.multiply_mod_matrix_blas(
+		(*C.double)(unsafe.Pointer(&a64[0])),
+		(*C.double)(unsafe.Pointer(&b64[0])),
+		(*C.ulonglong)(unsafe.Pointer(&resultFlat[0])),
+		C.ulonglong(size_a),
+		C.ulonglong(size_b),
+		C.ulonglong(size_c),
+		C.ulonglong(p),
+	)
 
-    // --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
-    // C가 결과를 out에 써줌
-    resultFlat := make([]uint64, size_a*size_c)
+	// --- 2D로 되돌리기 ---
+	res := make([][]uint64, size_a)
+	for i := 0; i < size_a; i++ {
+		row := make([]uint64, size_c)
+		copy(row, resultFlat[i*size_c:(i+1)*size_c])
+		res[i] = row
+	}
+	return res
+}
 
-    // --- C 호출 (포인터 캐스팅만) ---
-    C.multiply_mod_matrix_blas(
-        (*C.double)(unsafe.Pointer(&a64[0])),
-        (*C.double)(unsafe.Pointer(&b64[0])),
-        (*C.ulonglong)(unsafe.Pointer(&resultFlat[0])),
-        C.ulonglong(size_a),
-        C.ulonglong(size_b),
-        C.ulonglong(size_c),
-        C.ulonglong(p),
-    )
+func Mult_mod_mat_BlasBarret(A, B [][]uint64, size_a, size_b, size_c int, p uint64, bred uint64) [][]uint64 {
+	// --- 평탄화 (uint64 -> float64) ---
+	a64 := make([]float64, size_a*size_b)
+	for i := 0; i < size_a; i++ {
+		row := A[i]
+		base := i * size_b
+		for j := 0; j < size_b; j++ {
+			a64[base+j] = float64(row[j])
+		}
+	}
 
-    // --- 2D로 되돌리기 ---
-    res := make([][]uint64, size_a)
-    for i := 0; i < size_a; i++ {
-        row := make([]uint64, size_c)
-        copy(row, resultFlat[i*size_c:(i+1)*size_c])
-        res[i] = row
-    }
-    return res
+	b64 := make([]float64, size_b*size_c)
+	for i := 0; i < size_b; i++ {
+		row := B[i]
+		base := i * size_c
+		for j := 0; j < size_c; j++ {
+			b64[base+j] = float64(row[j])
+		}
+	}
+
+	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+	// C가 결과를 out에 써줌
+	resultFlat := make([]uint64, size_a*size_c)
+
+	// --- C 호출 (포인터 캐스팅만) ---
+	C.multiply_mod_matrix_blas2(
+		(*C.double)(unsafe.Pointer(&a64[0])),
+		(*C.double)(unsafe.Pointer(&b64[0])),
+		(*C.ulonglong)(unsafe.Pointer(&resultFlat[0])),
+		C.ulonglong(size_a),
+		C.ulonglong(size_b),
+		C.ulonglong(size_c),
+		C.ulonglong(p),
+		C.ulonglong(bred),
+	)
+
+	// --- 2D로 되돌리기 ---
+	res := make([][]uint64, size_a)
+	for i := 0; i < size_a; i++ {
+		row := make([]uint64, size_c)
+		copy(row, resultFlat[i*size_c:(i+1)*size_c])
+		res[i] = row
+	}
+	return res
+}
+
+func Mult_mat_Blas_RoundMod(A, B [][]float64, size_a, size_b, size_c int, p uint64, bredP uint64) [][]float64 {
+	// --- 평탄화 (uint64 -> float64) ---
+	a64 := make([]float64, size_a*size_b)
+	for i := 0; i < size_a; i++ {
+		row := A[i]
+		base := i * size_b
+		for j := 0; j < size_b; j++ {
+			a64[base+j] = (row[j])
+		}
+	}
+
+	b64 := make([]float64, size_b*size_c)
+	for i := 0; i < size_b; i++ {
+		row := B[i]
+		base := i * size_c
+		for j := 0; j < size_c; j++ {
+			b64[base+j] = (row[j])
+		}
+	}
+
+	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+	// C가 결과를 out에 써줌
+	resultFlat := make([]float64, size_a*size_c)
+	fillfast(resultFlat, 0.5)
+
+	// --- C 호출 (포인터 캐스팅만) ---
+	C.multiply_mod_matrix_blas2(
+		(*C.double)(unsafe.Pointer(&a64[0])),
+		(*C.double)(unsafe.Pointer(&b64[0])),
+		(*C.ulonglong)(unsafe.Pointer(&resultFlat[0])),
+		C.ulonglong(size_a),
+		C.ulonglong(size_b),
+		C.ulonglong(size_c),
+		C.ulonglong(p),
+		C.ulonglong(bredP),
+	)
+
+	// --- 2D로 되돌리기 ---
+	res := make([][]float64, size_a)
+	for i := 0; i < size_a; i++ {
+		row := make([]float64, size_c)
+		copy(row, resultFlat[i*size_c:(i+1)*size_c])
+		res[i] = row
+	}
+	return res
+}
+func fillfast(s []float64, v float64) {
+	if len(s) == 0 {
+		return
+	}
+	s[0] = v
+	for bp := 1; bp < len(s); bp *= 2 {
+		copy(s[bp:], s[:bp])
+	}
 }

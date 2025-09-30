@@ -81,4 +81,61 @@ void multiply_mod_matrix_blas(const double *a,
     for(int i = 0; i< n_a * n_c; i++){
         result[i] = (ulong)(res[i]) % p;
     }
+    free(res);
+}
+
+
+static inline __attribute__((always_inline))
+unsigned long long barrett_u64(unsigned long long x,
+                               unsigned long long p,
+                               unsigned long long bred)
+{
+    unsigned __int128 t = (unsigned __int128)x * (unsigned __int128)bred;
+    unsigned long long q = (unsigned long long)(t >> 64);
+    unsigned long long r = x - q * p;
+    // 분기 없는 조건 감산: r -= (r>=p)? p : 0
+    r -= (unsigned long long)-(r >= p) & p;
+    return r;
+}
+
+void multiply_mod_matrix_blas2(const double *restrict a,
+                               const double *restrict b,
+                               unsigned long long *restrict result,
+                               const unsigned long long n_a,
+                               const unsigned long long n_b,
+                               const unsigned long long n_c,
+                               const unsigned long long p,
+                               const unsigned long long bred)
+{
+    double *res = (double*)aligned_alloc(64, sizeof(double) * n_a * n_c);
+
+    cblas_dgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+                (int)n_a, (int)n_c, (int)n_b,
+                1.0, a, (int)n_b,
+                     b, (int)n_c,
+                1.0, res, (int)n_c);
+
+    const size_t N = (size_t)n_a * (size_t)n_c;
+
+    for (size_t i = 0; i < N; ++i) {
+        unsigned long long u = (unsigned long long)res[i];
+        result[i] = barrett_u64(u, p, bred);
+    }
+
+    free(res);
+}
+
+void mul64(unsigned long long x, unsigned long long y, unsigned long long *hi) {
+	const unsigned long long mask32 = 1<<32 - 1;
+	unsigned long long x0 = x & mask32;
+	unsigned long long x1 = x >> 32;
+	unsigned long long y0 = y & mask32;
+	unsigned long long y1 = y >> 32;
+	unsigned long long w0 = x0 * y0;
+	unsigned long long t = x1*y0 + w0>>32;
+	unsigned long long w1 = t & mask32;
+	unsigned long long w2 = t >> 32;
+    w1 += x0 * y1;
+
+	(*hi) = x1*y1 + w2 + w1>>32;
 }

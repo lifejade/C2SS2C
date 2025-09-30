@@ -618,6 +618,31 @@ func PPMM_Blas_CRT(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n
 	}
 }
 
+func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n_a, n_b, n_c, level int, bred []uint64, ringP *ring.Ring, result []ring.Poly) {
+	a := make([][][]uint64, level)
+	for j := range level {
+		a[j] = make([][]uint64, n_b)
+	}
+
+	for i := range n_b {
+		for j := range level {
+			a[j][i] = (cts[i].Coeffs[j])
+		}
+	}
+
+	CA := make([][][]uint64, level)
+	P := ringP.ModuliChain()
+	for i := range level {
+		CA[i] = cwrappingflint.Mult_mod_mat_BlasBarret(u[i], a[i], n_a, n_b, n_c, P[i], bred[i])
+	}
+
+	for i := range n_a {
+		for j := range level {
+			result[i].Coeffs[j] = CA[j][i]
+		}
+	}
+}
+
 func AddMany(cts1, cts2 []*rlwe.Ciphertext, evaluator *hefloat.Evaluator) []*rlwe.Ciphertext {
 	res := make([]*rlwe.Ciphertext, len(cts1))
 

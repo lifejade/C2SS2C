@@ -775,10 +775,10 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 	//24bit
 	P := []uint64{14624959, 15092711, 16654291, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841, 13097699, 13844113, 14952997, 14788847, 15081413, 15146069, 16552919, 15883789, 13399327, 13466251, 16003619, 14104499, 15536119, 16667741, 12891587, 13922939, 13375783, 14587351, 15993793, 13077359, 13881059, 14541113, 16076227, 15457859, 13534247, 16327063, 16321843, 15841601, 12901619, 12990127, 14647547, 13025123, 13413511, 15537433, 13879141, 15439847, 13149043}
 	P = P[:40]
-	startLevels := []int{2}
+	startLevels := []int{14}
 	levelstep := 2
 	sizes := []int{1 << 8, 1 << 7}
-	scale := float64(1 << 30)
+	scale := float64(1 << 20)
 	for l := range startLevels {
 		fmt.Println("//////////////////////////////////////////////////////////////")
 		pt := hefloat.NewPlaintext(params, startLevels[l])
@@ -798,7 +798,7 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 			PLevel++
 		}
 		fmt.Println(PLevel)
-		PLevel += 1
+		PLevel += 2
 
 		sc := rlwe.NewScale(1)
 		for i := range levelstep {
@@ -870,6 +870,482 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 					for i := range size {
 						_ = i
 						be.ModUpPtoQ2(PLevel, startLevel, rings[idx][i], ct.Value[idx])
+					}
+				}
+				elapse_ = time.Since(time_)
+				fmt.Println("modswitch2", elapse_)
+				steptime += elapse_
+			}
+			for idx := range 2 {
+				ringiters[idx] = rings[idx][0]
+			}
+			if step != 0 && step != levelstep-1 {
+				fmt.Println("steptime : ", steptime)
+				steptime = steptime * 12 * (1 << 10)
+				fmt.Println("steptotaltime : ", steptime)
+			} else {
+				if step == 0 {
+
+					fmt.Println("steptime : ", steptime)
+					steptime = steptime * 8 * (1 << 7)
+					fmt.Println("steptotaltime : ", steptime)
+				} else {
+					fmt.Println("steptime : ", steptime)
+					steptime = steptime * 8 * (1 << 8)
+					fmt.Println("steptotaltime : ", steptime)
+				}
+			}
+			totaltime += steptime
+		}
+
+		sscale := 1.0
+		for range levelstep {
+			sscale *= scale
+		}
+		time_ := time.Now()
+		//fmt.Println(ct.Level())
+		// ringQ.NTT(ct.Value[0], ct.Value[0])
+		// ringQ.NTT(ct.Value[1], ct.Value[1])
+
+		Mul2_(evaluator, ct, 1/(sscale), ct, sc)
+		//evaluator.Mul2(ct, 1/(scale*scale*scale), ct, sc)
+		//ct.Scale = sc
+		//fmt.Println(ct.LogScale())
+		Rescale_NonNTT(evaluator, ct, ct)
+		elapse_ := time.Since(time_)
+		fmt.Println("rescale (have to mult degree times)", elapse_)
+		fmt.Println("rescale", elapse_*(1<<16))
+		totaltime += elapse_ * (1 << 16)
+		fmt.Println("totaltime (cal.) : ", totaltime.Seconds())
+		ringQ.AtLevel(ct.Level()).NTT(ct.Value[0], ct.Value[0])
+		ringQ.AtLevel(ct.Level()).NTT(ct.Value[1], ct.Value[1])
+		values := make([]float64, n)
+
+		dept := decryptor.DecryptNew(ct)
+		encoder.Decode(dept, values)
+		fmt.Println(ct.Level())
+		fmt.Println(ct.LogScale())
+		fmt.Println(values)
+		fmt.Println("//////////////////////////////////////////////////////////////")
+	}
+}
+
+func Test_ModSwitch_Opt3(t *testing.T) {
+	//CPU full power
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		// logN = 13, full slots
+		// # special modulus = 1
+		// # available levels = 4
+		LogN:            16,
+		LogQ:            []int{50, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48},
+		LogP:            []int{50},
+		Xs:              ring.Ternary{H: 256},
+		LogDefaultScale: 40,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	n := params.N()
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	fmt.Println("N is this  : ", n)
+	value := make([]float64, n)
+	for i, _ := range value {
+		value[i] = 0.001
+	}
+
+	//24bit
+	P := []uint64{14624959, 15092711, 16654291, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841, 13097699, 13844113, 14952997, 14788847, 15081413, 15146069, 16552919, 15883789, 13399327, 13466251, 16003619, 14104499, 15536119, 16667741, 12891587, 13922939, 13375783, 14587351, 15993793, 13077359, 13881059, 14541113, 16076227, 15457859, 13534247, 16327063, 16321843, 15841601, 12901619, 12990127, 14647547, 13025123, 13413511, 15537433, 13879141, 15439847, 13149043}
+	//23bit
+	P = []uint64{4194319, 4194329, 4194353, 4194371, 4194389, 4194397, 4194403, 4194409, 4194419, 4194433, 4194439, 4194451, 4194493, 4194503, 4194511, 4194523, 4194527, 4194559, 4194581, 4194583, 4194599, 4194601, 4194637, 4194643, 4194661, 4194677, 4194679, 4194713, 4194719, 4194739, 4194761, 4194769, 4194781}
+
+	// P = P[:40]
+	startLevels := []int{14}
+	levelstep := 2
+	sizes := []int{1 << 8, 1 << 7}
+	scale := float64(1 << 40)
+	for l := range startLevels {
+		fmt.Println("//////////////////////////////////////////////////////////////")
+		pt := hefloat.NewPlaintext(params, startLevels[l])
+		pt.IsBatched = false
+		encoder.Encode(value, pt)
+		ct, _ := encryptor.EncryptNew(pt)
+		ringQ := params.RingQ().AtLevel(startLevels[l])
+		ringP, _ := ring.NewRing(params.N(), P)
+		// PLevel := 2*startLevels[l] - 3
+		PLevel := 32
+		fmt.Println("ring Q : ", ringQ.ModulusAtLevel[startLevels[l]])
+		fmt.Println("ring P : ", ringP.ModulusAtLevel[PLevel])
+
+		be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{From: startLevels[l], To: PLevel}}, []matmult.Key{{From: PLevel, To: startLevels[l]}})
+		ringQ.INTT(ct.Value[0], ct.Value[0])
+		ringQ.INTT(ct.Value[1], ct.Value[1])
+
+		sc := rlwe.NewScale(1)
+		for i := range levelstep {
+			q := rlwe.NewScale(params.Q()[startLevels[l]-i])
+			sc = sc.Mul(q)
+		}
+
+		ringiters := make([]ring.Poly, 2)
+		for idx := range ringiters {
+			ringiters[idx] = ringP.NewPoly()
+		}
+		var totaltime time.Duration
+		for step := range levelstep {
+			var steptime time.Duration
+			startLevel := startLevels[l]
+			fmt.Println("level : ", startLevel-step)
+
+			size := sizes[step]
+			u := make([][][]uint64, PLevel+1)
+			for i := range u {
+				u[i] = make([][]uint64, size)
+				for j := range u[i] {
+					u[i][j] = make([]uint64, size)
+					for k := range u[i][j] {
+						u[i][j][k] = uint64(0.5*scale) % ringP.ModuliChain()[i]
+					}
+				}
+			}
+
+			rings := make([][]ring.Poly, 2)
+			for idx := range 2 {
+				rings[idx] = make([]ring.Poly, sizes[step])
+				for i := range sizes[step] {
+					rings[idx][i] = ringP.NewPoly()
+				}
+			}
+
+			fmt.Println("/////////////////////////////////")
+			fmt.Println("step : ", step)
+			if step == 0 {
+				time_ := time.Now()
+				for idx := range 2 {
+					for i := range size {
+						be.ModSwitchQtoP(startLevel, PLevel, ct.Value[idx], rings[idx][i])
+					}
+				}
+				elapse_ := time.Since(time_)
+				fmt.Println("modswitch", elapse_)
+				steptime += elapse_
+			} else {
+				for idx := range 2 {
+					for i := range size {
+						rings[idx][i] = ringiters[idx]
+					}
+				}
+			}
+
+			time_ := time.Now()
+			for idx := range 2 {
+				matmult.PPMM_Blas_CRT(rings[idx], u, params, size, size, params.N(), PLevel+1, ringP, rings[idx])
+			}
+			elapse_ := time.Since(time_)
+			fmt.Println("ppmm", elapse_)
+			steptime += elapse_
+
+			if step == levelstep-1 {
+				time_ = time.Now()
+				for idx := range 2 {
+					for i := range size {
+						_ = i
+						be.ModSwitchPtoQ(PLevel, startLevel, rings[idx][i], ct.Value[idx])
+					}
+				}
+				elapse_ = time.Since(time_)
+				fmt.Println("modswitch2", elapse_)
+				steptime += elapse_
+			}
+			for idx := range 2 {
+				ringiters[idx] = rings[idx][0]
+			}
+			if step != 0 && step != levelstep-1 {
+				fmt.Println("steptime : ", steptime)
+				steptime = steptime * 12 * (1 << 10)
+				fmt.Println("steptotaltime : ", steptime)
+			} else {
+				if step == 0 {
+
+					fmt.Println("steptime : ", steptime)
+					steptime = steptime * 8 * (1 << 7)
+					fmt.Println("steptotaltime : ", steptime)
+				} else {
+					fmt.Println("steptime : ", steptime)
+					steptime = steptime * 8 * (1 << 8)
+					fmt.Println("steptotaltime : ", steptime)
+				}
+			}
+			totaltime += steptime
+		}
+
+		sscale := 1.0
+		for range levelstep {
+			sscale *= scale
+		}
+		time_ := time.Now()
+		//fmt.Println(ct.Level())
+		// ringQ.NTT(ct.Value[0], ct.Value[0])
+		// ringQ.NTT(ct.Value[1], ct.Value[1])
+
+		Mul2_(evaluator, ct, 1/(sscale), ct, sc)
+		//evaluator.Mul2(ct, 1/(scale*scale*scale), ct, sc)
+		//ct.Scale = sc
+		//fmt.Println(ct.LogScale())
+		Rescale_NonNTT(evaluator, ct, ct)
+		elapse_ := time.Since(time_)
+		fmt.Println("rescale (have to mult degree times)", elapse_)
+		fmt.Println("rescale", elapse_*(1<<16))
+		totaltime += elapse_ * (1 << 16)
+		fmt.Println("totaltime (cal.) : ", totaltime.Seconds())
+		ringQ.AtLevel(ct.Level()).NTT(ct.Value[0], ct.Value[0])
+		ringQ.AtLevel(ct.Level()).NTT(ct.Value[1], ct.Value[1])
+		values := make([]float64, n)
+
+		dept := decryptor.DecryptNew(ct)
+		encoder.Decode(dept, values)
+		fmt.Println(ct.Level())
+		fmt.Println(ct.LogScale())
+		fmt.Println(values)
+		fmt.Println("//////////////////////////////////////////////////////////////")
+	}
+}
+
+func Test_ModSwitch_Opt4(t *testing.T) {
+	//CPU full power
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		// logN = 13, full slots
+		// # special modulus = 1
+		// # available levels = 4
+		LogN:            16,
+		LogQ:            []int{50, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48},
+		LogP:            []int{50},
+		Xs:              ring.Ternary{H: 256},
+		LogDefaultScale: 40,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	n := params.N()
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	fmt.Println("N is this  : ", n)
+	value := make([]float64, n)
+	for i, _ := range value {
+		value[i] = 0.001
+	}
+
+	//24bit
+	P := []uint64{14624959, 15092711, 16654291, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841, 13097699, 13844113, 14952997, 14788847, 15081413, 15146069, 16552919, 15883789, 13399327, 13466251, 16003619, 14104499, 15536119, 16667741, 12891587, 13922939, 13375783, 14587351, 15993793, 13077359, 13881059, 14541113, 16076227, 15457859, 13534247, 16327063, 16321843, 15841601, 12901619, 12990127, 14647547, 13025123, 13413511, 15537433, 13879141, 15439847, 13149043}
+	//23bit
+	P = []uint64{4194319, 4194329, 4194353, 4194371, 4194389, 4194397, 4194403, 4194409, 4194419, 4194433, 4194439, 4194451, 4194493, 4194503, 4194511, 4194523, 4194527, 4194559, 4194581, 4194583, 4194599, 4194601, 4194637, 4194643, 4194661, 4194677, 4194679, 4194713, 4194719, 4194739, 4194761, 4194769, 4194781}
+
+	// P = P[:40]
+	startLevels := []int{2}
+	levelstep := 2
+	sizes := []int{1 << 8, 1 << 7}
+	scale := float64(1 << 30)
+	for l := range startLevels {
+		fmt.Println("//////////////////////////////////////////////////////////////")
+		pt := hefloat.NewPlaintext(params, startLevels[l])
+		pt.IsBatched = false
+		encoder.Encode(value, pt)
+		ct, _ := encryptor.EncryptNew(pt)
+		ringQ := params.RingQ().AtLevel(startLevels[l])
+		ringP, _ := ring.NewRing(params.N(), P)
+		// PLevel := 2*startLevels[l] - 3
+		PLevel := 6
+		fmt.Println("ring Q : ", ringQ.ModulusAtLevel[startLevels[l]])
+		fmt.Println("ring P : ", ringP.ModulusAtLevel[PLevel])
+
+		be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{From: startLevels[l], To: PLevel}}, []matmult.Key{{From: PLevel, To: startLevels[l]}})
+		bredP := make([]uint64, len(P))
+		for i := range bredP {
+			bredP[i] = ring.BRedConstant(P[i])[0]
+		}
+
+		ringQ.INTT(ct.Value[0], ct.Value[0])
+		ringQ.INTT(ct.Value[1], ct.Value[1])
+
+		sc := rlwe.NewScale(1)
+		for i := range levelstep {
+			q := rlwe.NewScale(params.Q()[startLevels[l]-i])
+			sc = sc.Mul(q)
+		}
+
+		ringiters := make([]ring.Poly, 2)
+		for idx := range ringiters {
+			ringiters[idx] = ringP.NewPoly()
+		}
+		var totaltime time.Duration
+		for step := range levelstep {
+			var steptime time.Duration
+			startLevel := startLevels[l]
+			fmt.Println("level : ", startLevel-step)
+
+			size := sizes[step]
+			u := make([][][]uint64, PLevel+1)
+			for i := range u {
+				u[i] = make([][]uint64, size)
+				for j := range u[i] {
+					u[i][j] = make([]uint64, size)
+					for k := range u[i][j] {
+						u[i][j][k] = uint64(0.5*scale) % ringP.ModuliChain()[i]
+					}
+				}
+			}
+
+			rings := make([][]ring.Poly, 2)
+			for idx := range 2 {
+				rings[idx] = make([]ring.Poly, sizes[step])
+				for i := range sizes[step] {
+					rings[idx][i] = ringP.NewPoly()
+				}
+			}
+
+			fmt.Println("/////////////////////////////////")
+			fmt.Println("step : ", step)
+			if step == 0 {
+				time_ := time.Now()
+				for idx := range 2 {
+					for i := range size {
+						be.ModSwitchQtoP(startLevel, PLevel, ct.Value[idx], rings[idx][i])
+					}
+				}
+				elapse_ := time.Since(time_)
+				fmt.Println("modswitch", elapse_)
+				steptime += elapse_
+			} else {
+				for idx := range 2 {
+					for i := range size {
+						rings[idx][i] = ringiters[idx]
+					}
+				}
+			}
+
+			time_ := time.Now()
+			for idx := range 2 {
+				// fmt.Println(rings[idx][0])
+				matmult.PPMM_Blas_CRTBarret(rings[idx], u, params, size, size, params.N(), PLevel+1, bredP, ringP, rings[idx])
+				// matmult.PPMM_Blas_CRT(rings[idx], u, params, size, size, params.N(), PLevel+1, ringP, rings[idx])
+				// fmt.Println(rings[idx][0])
+			}
+			elapse_ := time.Since(time_)
+			fmt.Println("ppmm", elapse_)
+			steptime += elapse_
+
+			if step == levelstep-1 {
+				time_ = time.Now()
+				for idx := range 2 {
+					for i := range size {
+						_ = i
+						be.ModSwitchPtoQ(PLevel, startLevel, rings[idx][i], ct.Value[idx])
 					}
 				}
 				elapse_ = time.Since(time_)

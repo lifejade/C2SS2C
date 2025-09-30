@@ -40,19 +40,19 @@ func Test_Basis2(t *testing.T) {
 	ringQ, _ := ring.NewRing(1<<5, Q)
 	ringP, _ := ring.NewRing(1<<5, P)
 
-	be := NewBasisExtender(ringQ, ringP)
+	be := NewBasisExtender(ringQ, ringP, []Key{Key{1, 3}}, []Key{Key{3, 1}})
 	p1 := ringQ.NewPoly()
 	p2 := ringP.NewPoly()
 	res := ringQ.NewPoly()
 
 	fmt.Println(Q)
 	fmt.Println(P)
-	fmt.Println(be.constantsQtoP[1].qoverqiinvqi)
-	fmt.Println(be.constantsQtoP[1].alphaimodp)
-	fmt.Println(be.constantsQtoP[1].betaioverqi)
-	fmt.Println(be.constantsPtoQ[3].qoverqiinvqi)
-	fmt.Println(be.constantsPtoQ[3].alphaimodp)
-	fmt.Println(be.constantsPtoQ[3].betaioverqi)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 3}].qoverqiinvqi)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 3}].alphaimodp)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 3}].betaioverqi)
+	fmt.Println(be.dicConstantsPtoQ[Key{3, 1}].qoverqiinvqi)
+	fmt.Println(be.dicConstantsPtoQ[Key{3, 1}].alphaimodp)
+	fmt.Println(be.dicConstantsPtoQ[Key{3, 1}].betaioverqi)
 
 	for i := range p1.Coeffs {
 		for j := range p1.Coeffs[i] {
@@ -177,19 +177,18 @@ func Test_Basis3(t *testing.T) {
 	pt.IsBatched = false
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
-	ringQ, _ := ring.NewRing(params.N(), params.Q()[:2])
+	ringQ, _ := ring.NewRing(params.N(), params.Q()[:3])
 	ringP, _ := ring.NewRing(params.N(), P)
-	be := NewBasisExtender(ringQ.AtLevel(1), ringP)
+	be := NewBasisExtender(ringQ.AtLevel(1), ringP, []Key{{1, 4}}, []Key{{4, 1}})
 
 	fmt.Println(ringQ.AtLevel(1).ModuliChain())
 	fmt.Println(P)
-	fmt.Println(be.constantsQtoP[1].qoverqiinvqi)
-	fmt.Println(be.constantsQtoP[1].alphaimodp)
-	fmt.Println(be.constantsQtoP[1].betaioverqi)
-
-	fmt.Println(be.constantsPtoQ[3].qoverqiinvqi)
-	fmt.Println(be.constantsPtoQ[3].alphaimodp)
-	fmt.Println(be.constantsPtoQ[3].betaioverqi)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 4}].qoverqiinvqi)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 4}].alphaimodp)
+	fmt.Println(be.dicConstantsQtoP[Key{1, 4}].betaioverqi)
+	fmt.Println(be.dicConstantsPtoQ[Key{4, 1}].qoverqiinvqi)
+	fmt.Println(be.dicConstantsPtoQ[Key{4, 1}].alphaimodp)
+	fmt.Println(be.dicConstantsPtoQ[Key{4, 1}].betaioverqi)
 
 	ringQ.AtLevel(1).INTT(ct.Value[0], ct.Value[0])
 	ringQ.AtLevel(1).INTT(ct.Value[1], ct.Value[1])

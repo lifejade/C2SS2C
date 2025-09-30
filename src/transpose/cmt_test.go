@@ -211,8 +211,8 @@ func Test_Transpose2(t *testing.T) {
 		// scale = 1<<46
 		// # special modulus = 3
 		// # available levels = 16
-		LogN:            10,
-		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
+		LogN:            16,
+		LogQ:            []int{51, 46, 46, 46},
 		LogP:            []int{51},
 		LogDefaultScale: 46,
 	}
@@ -240,7 +240,7 @@ func Test_Transpose2(t *testing.T) {
 	rlk = kgen.GenRelinearizationKeyNew(sk)
 
 	// generate keys - Rotating key
-	galEls := make([]uint64, 2*n)
+	galEls := make([]uint64, 1)
 	for i := range galEls {
 		galEls[i] = uint64(2*i + 1)
 	}
@@ -287,12 +287,15 @@ func Test_Transpose2(t *testing.T) {
 
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
+	params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[0],ct.Value[0])
+	params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[1],ct.Value[1])
 	cts := make([]*rlwe.Ciphertext, 2*n)
 	for i := range cts {
-		cts[i] = ct.CopyNew()
+		cts[i] = ct
 	}
+	fmt.Println("ctgen end")
 
-	result := Transpose(cts, params, evaluator, encoder, 2*n)
+	result := TransposeInplace(cts, params, evaluator, encoder, 2*n)
 
 	reval := make([][]float64, 2*n)
 	for i := range reval {

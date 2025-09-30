@@ -3,6 +3,7 @@ package transpose
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
@@ -119,6 +120,7 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 	ringQ.MFormRNSScalar(ninv, ninv)
 	ringQ.Inverse(ninv)
 
+	starttime := time.Now()
 	for i := range cts {
 		cts[i] = inputs[i].CopyNew()
 		ringQ.INTT(cts[i].Value[0], cts[i].Value[0])
@@ -129,9 +131,16 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 
 		ringQ.NTT(cts[i].Value[0], cts[i].Value[0])
 		ringQ.NTT(cts[i].Value[1], cts[i].Value[1])
-
 	}
+	elapse := time.Since(starttime)
+	fmt.Println("mult by monomial", elapse)
+
+	starttime = time.Now()
 	aux := Tweak2(cts, params, eval, encoder, n)
+	elapse = time.Since(starttime)
+	fmt.Println("TWEAK", elapse)
+
+	starttime = time.Now()
 	res := make([]*rlwe.Ciphertext, n)
 	for i := range res {
 		idx, ch := ModInv(uint64(2*i+1), uint64(2*n))
@@ -153,12 +162,15 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 		ringQ.NTT(res[i].Value[0], res[i].Value[0])
 		ringQ.NTT(res[i].Value[1], res[i].Value[1])
 
-		if err := eval.Automorphism(res[i], uint64(2*i+1), res[i]); err != nil {
+		//uint64(2*i+1)
+		if err := eval.Automorphism(res[i], uint64(1), res[i]); err != nil {
 			fmt.Println(err)
 		}
-
 	}
+	elapse = time.Since(starttime)
+	fmt.Println("Automorphism", elapse)
 
+	starttime = time.Now()
 	res2 := Tweak2(res, params, eval, encoder, n)
 	result := make([]*rlwe.Ciphertext, n)
 	for i := range n {
@@ -176,6 +188,90 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 
 		result[(n-i)%(n)] = res2[i]
 	}
+	elapse = time.Since(starttime)
+	fmt.Println("TWEAK2 & replace", elapse)
+
+	return result
+}
+
+// TODO
+func TransposeInplace(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, encoder *hefloat.Encoder, n int) []*rlwe.Ciphertext {
+	cts := make([]*rlwe.Ciphertext, n)
+	ringQ := params.RingQ().AtLevel(inputs[0].Level())
+	ninv := ringQ.NewRNSScalarFromUInt64(uint64(n))
+	ringQ.MFormRNSScalar(ninv, ninv)
+	ringQ.Inverse(ninv)
+
+	starttime := time.Now()
+	for i := range 1 {
+		cts[i] = inputs[i]
+		// ringQ.INTT(cts[i].Value[0], cts[i].Value[0])
+		// ringQ.INTT(cts[i].Value[1], cts[i].Value[1])
+
+		ringQ.MultByMonomial(cts[i].Value[0], i, cts[i].Value[0])
+		ringQ.MultByMonomial(cts[i].Value[1], i, cts[i].Value[1])
+
+		ringQ.NTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.NTT(cts[i].Value[1], cts[i].Value[1])
+	}
+	elapse := time.Since(starttime)
+	fmt.Println("mult by monomial", elapse*2^16)
+
+	starttime = time.Now()
+	aux := Tweak2(cts, params, eval, encoder, n)
+	elapse = time.Since(starttime)
+	fmt.Println("TWEAK", elapse)
+
+	starttime = time.Now()
+	res := make([]*rlwe.Ciphertext, n)
+	for i := range res {
+		idx, ch := ModInv(uint64(2*i+1), uint64(2*n))
+		if !ch {
+			fmt.Println("err ", i, " ", idx)
+		}
+		res[i] = aux[(idx-1)/2].CopyNew()
+
+		ringQ.INTT(res[i].Value[0], res[i].Value[0])
+		ringQ.INTT(res[i].Value[1], res[i].Value[1])
+		ringQ.MForm(res[i].Value[0], res[i].Value[0])
+		ringQ.MForm(res[i].Value[1], res[i].Value[1])
+
+		ringQ.MulRNSScalarMontgomery(res[i].Value[0], ninv, res[i].Value[0])
+		ringQ.MulRNSScalarMontgomery(res[i].Value[1], ninv, res[i].Value[1])
+
+		ringQ.IMForm(res[i].Value[0], res[i].Value[0])
+		ringQ.IMForm(res[i].Value[1], res[i].Value[1])
+		ringQ.NTT(res[i].Value[0], res[i].Value[0])
+		ringQ.NTT(res[i].Value[1], res[i].Value[1])
+
+		//uint64(2*i+1)
+		if err := eval.Automorphism(res[i], uint64(1), res[i]); err != nil {
+			fmt.Println(err)
+		}
+	}
+	elapse = time.Since(starttime)
+	fmt.Println("Automorphism", elapse)
+
+	starttime = time.Now()
+	res2 := Tweak2(res, params, eval, encoder, n)
+	result := make([]*rlwe.Ciphertext, n)
+	for i := range n {
+		ringQ.INTT(res2[i].Value[0], res2[i].Value[0])
+		ringQ.INTT(res2[i].Value[1], res2[i].Value[1])
+
+		ringQ.MultByMonomial(res2[i].Value[0], i, res2[i].Value[0])
+		ringQ.MultByMonomial(res2[i].Value[1], i, res2[i].Value[1])
+		if i != 0 {
+			ringQ.Neg(res2[i].Value[0], res2[i].Value[0])
+			ringQ.Neg(res2[i].Value[1], res2[i].Value[1])
+		}
+		ringQ.NTT(res2[i].Value[0], res2[i].Value[0])
+		ringQ.NTT(res2[i].Value[1], res2[i].Value[1])
+
+		result[(n-i)%(n)] = res2[i]
+	}
+	elapse = time.Since(starttime)
+	fmt.Println("TWEAK2 & replace", elapse)
 
 	return result
 }

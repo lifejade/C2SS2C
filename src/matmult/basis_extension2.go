@@ -1,6 +1,7 @@
 package matmult
 
 import (
+	"fmt"
 	"math"
 	"math/big"
 	"math/bits"
@@ -14,8 +15,6 @@ import (
 type BasisExtender struct {
 	ringQ            *ring.Ring
 	ringP            *ring.Ring
-	constantsQtoP    []ModUpConstants
-	constantsPtoQ    []ModUpConstants
 	dicConstantsQtoP map[Key]ModUpConstants
 	dicConstantsPtoQ map[Key]ModUpConstants
 	buffQ            ring.Poly
@@ -23,38 +22,12 @@ type BasisExtender struct {
 }
 
 type Key struct {
-	from int
-	to   int
+	From int
+	To   int
 }
 
 // NewBasisExtender creates a new BasisExtender, enabling RNS basis extension from Q to P and P to Q.
-func NewBasisExtender(ringQ, ringP *ring.Ring) (be *BasisExtender) {
-
-	be = new(BasisExtender)
-
-	be.ringQ = ringQ
-	be.ringP = ringP
-
-	Q := ringQ.ModuliChain()
-	P := ringP.ModuliChain()
-
-	be.constantsQtoP = make([]ModUpConstants, ringQ.ModuliChainLength())
-	for i := range Q {
-		be.constantsQtoP[i] = GenModUpConstants(Q[:i+1], P)
-	}
-
-	be.constantsPtoQ = make([]ModUpConstants, ringP.ModuliChainLength())
-	for i := range P {
-		be.constantsPtoQ[i] = GenModUpConstants(P[:i+1], Q)
-	}
-
-	be.buffQ = ringQ.NewPoly()
-	be.buffP = ringP.NewPoly()
-
-	return
-}
-
-func NewBasisExtender2(ringQ, ringP *ring.Ring, QtoP, PtoQ []Key) (be *BasisExtender) {
+func NewBasisExtender(ringQ, ringP *ring.Ring, QtoP, PtoQ []Key) (be *BasisExtender) {
 
 	be = new(BasisExtender)
 
@@ -65,18 +38,12 @@ func NewBasisExtender2(ringQ, ringP *ring.Ring, QtoP, PtoQ []Key) (be *BasisExte
 	P := ringP.ModuliChain()
 
 	be.dicConstantsQtoP = make(map[Key]ModUpConstants)
-	for key := range QtoP {
-		be.dicConstantsQtoP[key] = GenModUpConstants()
+	for _, key := range QtoP {
+		be.dicConstantsQtoP[key] = GenModUpConstants(Q[:key.From+1], P[:key.To+1])
 	}
-
-	be.constantsQtoP = make([]ModUpConstants, ringQ.ModuliChainLength())
-	for i := range Q {
-		be.constantsQtoP[i] = GenModUpConstants(Q[:i+1], P)
-	}
-
-	be.constantsPtoQ = make([]ModUpConstants, ringP.ModuliChainLength())
-	for i := range P {
-		be.constantsPtoQ[i] = GenModUpConstants(P[:i+1], Q)
+	be.dicConstantsPtoQ = make(map[Key]ModUpConstants)
+	for _, key := range PtoQ {
+		be.dicConstantsPtoQ[key] = GenModUpConstants(P[:key.From+1], Q[:key.To+1])
 	}
 
 	be.buffQ = ringQ.NewPoly()
@@ -135,24 +102,24 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 		qoverqiinvqi[i] = ring.ModexpMontgomery(qiStar, int(qi-2), qi, mredQ[i], bredQ[i])
 	}
 	QQ, RQ := ProductDivModBig(P, Q)
-	// fmt.Println(QQ, RQ)
+	fmt.Println(QQ, RQ)
 	for j := range Q {
 		temp := new(big.Float)
 		temp = temp.Quo(new(big.Float).SetInt(RQ[j]), new(big.Float).SetUint64((Q[j])))
 
-		biggerthanhalf := uint64(0)
-		// fmt.Println(betaioverqi)
-		if temp.Cmp(new(big.Float).SetFloat64(0.5)) > 0 {
-			// biggerthanhalf++
-			// temp.Sub(temp, new(big.Float).SetInt64(1))
-		}
+		// biggerthanhalf := uint64(0)
+		// // fmt.Println(betaioverqi)
+		// if temp.Cmp(new(big.Float).SetFloat64(0.5)) > 0 {
+		// 	biggerthanhalf++
+		// 	temp.Sub(temp, new(big.Float).SetInt64(1))
+		// }
 		betaioverqi[j], _ = temp.Float64()
 		// fmt.Println(betaioverqi)
 
 		for i := range P {
 			value := new(big.Int)
-			value.Add(QQ[j], new(big.Int).SetUint64(biggerthanhalf))
-			value.Mod(value, new(big.Int).SetUint64(P[i]))
+			// value.Add(QQ[j], new(big.Int).SetUint64(biggerthanhalf))
+			value.Mod(QQ[j], new(big.Int).SetUint64(P[i]))
 			alphaimodp[i][j] = ring.MForm(value.Uint64(), P[i], bredP[i])
 			// fmt.Println("alpha non Mform", value.Uint64())
 			// fmt.Println("alpha Mform", alphaimodp[i][j], " of ", P[i])
@@ -180,7 +147,6 @@ func ProductDivModBig(ps_ []uint64, qi_ []uint64) (Q, R []*big.Int) {
 			tempMul := new(big.Int)
 			tempQ := new(big.Int)
 			tempR := new(big.Int)
-
 			if j == 0 {
 				// ps의 첫 번째 요소일 경우, p * 1을 q로 나눕니다.
 				tempMul.Mul(new(big.Int).SetUint64(p), big.NewInt(1))
@@ -204,6 +170,7 @@ func ProductDivModBig(ps_ []uint64, qi_ []uint64) (Q, R []*big.Int) {
 				Q[i].Mul(Q[i], new(big.Int).SetUint64(p))
 				Q[i].Add(Q[i], tempQ)
 			}
+
 		}
 	}
 
@@ -217,10 +184,10 @@ func (be *BasisExtender) ShallowCopy() *BasisExtender {
 		return nil
 	}
 	return &BasisExtender{
-		ringQ:         be.ringQ,
-		ringP:         be.ringP,
-		constantsQtoP: be.constantsQtoP,
-		constantsPtoQ: be.constantsPtoQ,
+		ringQ:            be.ringQ,
+		ringP:            be.ringP,
+		dicConstantsQtoP: be.dicConstantsQtoP,
+		dicConstantsPtoQ: be.dicConstantsPtoQ,
 
 		buffQ: be.ringQ.NewPoly(),
 		buffP: be.ringP.NewPoly(),
@@ -237,7 +204,7 @@ func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP, polQ ring.Poly)
 	// PHalf.Rsh(PHalf, 1)
 
 	// ringP.AddScalarBigint(polP, PHalf, buffP)
-	ModUpExact(polP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.constantsPtoQ[levelP])
+	ModUpExact(polP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
 	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
 	// QHalf.Rsh(QHalf, 1)
 	// ringQ.SubScalarBigint(polQ, PHalf, polQ)
@@ -253,7 +220,7 @@ func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ, polP ring.Poly)
 	// QHalf.Rsh(QHalf, 1)
 
 	// ringQ.AddScalarBigint(polQ, QHalf, buffQ)
-	ModUpExact(polQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.constantsQtoP[levelQ])
+	ModUpExact(polQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
 	// PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
 	// PHalf.Rsh(PHalf, 1)
 	// ringP.SubScalarBigint(polP, QHalf, polP)
