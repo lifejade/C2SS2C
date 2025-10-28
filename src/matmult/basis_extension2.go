@@ -225,6 +225,15 @@ func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ, polP ring.Poly)
 	// PHalf.Rsh(PHalf, 1)
 	// ringP.SubScalarBigint(polP, QHalf, polP)
 }
+func MRed(x, y, q, qInv uint64) (r uint64) {
+	mhi, mlo := bits.Mul64(x, y)
+	hhi, _ := bits.Mul64(mlo*qInv, q)
+	r = mhi - hhi + q
+	if r >= q {
+		r -= q
+	}
+	return
+}
 
 // ModUpExact takes p1 mod Q and switches its basis to P, returning the result on p2.
 // Caution: values are not centered and returned values are in [0, 2P-1].
@@ -277,14 +286,14 @@ func reconstructRNS(start, end, x int, p [][]uint64, y0, y1, y2, y3, y4, y5, y6,
 		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p[i])%8 != 0 */
 		pTmp := (*[8]uint64)(unsafe.Pointer(&p[i][x]))
 
-		y0[j] = ring.MRed(pTmp[0], qoverqiinvqi, qi, qiInv)
-		y4[j] = ring.MRed(pTmp[4], qoverqiinvqi, qi, qiInv)
-		y1[j] = ring.MRed(pTmp[1], qoverqiinvqi, qi, qiInv)
-		y5[j] = ring.MRed(pTmp[5], qoverqiinvqi, qi, qiInv)
-		y2[j] = ring.MRed(pTmp[2], qoverqiinvqi, qi, qiInv)
-		y6[j] = ring.MRed(pTmp[6], qoverqiinvqi, qi, qiInv)
-		y3[j] = ring.MRed(pTmp[3], qoverqiinvqi, qi, qiInv)
-		y7[j] = ring.MRed(pTmp[7], qoverqiinvqi, qi, qiInv)
+		y0[j] = MRed(pTmp[0], qoverqiinvqi, qi, qiInv)
+		y4[j] = MRed(pTmp[4], qoverqiinvqi, qi, qiInv)
+		y1[j] = MRed(pTmp[1], qoverqiinvqi, qi, qiInv)
+		y5[j] = MRed(pTmp[5], qoverqiinvqi, qi, qiInv)
+		y2[j] = MRed(pTmp[2], qoverqiinvqi, qi, qiInv)
+		y6[j] = MRed(pTmp[6], qoverqiinvqi, qi, qiInv)
+		y3[j] = MRed(pTmp[3], qoverqiinvqi, qi, qiInv)
+		y7[j] = MRed(pTmp[7], qoverqiinvqi, qi, qiInv)
 	}
 }
 
@@ -312,55 +321,6 @@ func multSum(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7
 	_ = (*y5)[level]
 	_ = (*y6)[level]
 	_ = (*y7)[level]
-
-	var s [8]float64
-	for i := 0; i < level+1; i++ {
-
-		beta := betaioverqi[i]
-
-		s[0] = math.FMA(float64(y0[i]), beta, s[0])
-		s[4] = math.FMA(float64(y4[i]), beta, s[4])
-		s[1] = math.FMA(float64(y1[i]), beta, s[1])
-		s[5] = math.FMA(float64(y5[i]), beta, s[5])
-		s[2] = math.FMA(float64(y2[i]), beta, s[2])
-		s[6] = math.FMA(float64(y6[i]), beta, s[6])
-		s[3] = math.FMA(float64(y3[i]), beta, s[3])
-		s[7] = math.FMA(float64(y7[i]), beta, s[7])
-	}
-	var si [8]uint64
-	var s0 uint64
-
-	si[0] = uint64(s[0] + 0.5)
-	s0, _ = bits.Mul64(si[0], bredP)
-	si[0] = si[0] - s0*q
-
-	si[4] = uint64(s[4] + 0.5)
-	s0, _ = bits.Mul64(si[4], bredP)
-	si[4] = si[4] - s0*q
-
-	si[1] = uint64(s[1] + 0.5)
-	s0, _ = bits.Mul64(si[1], bredP)
-	si[1] = si[1] - s0*q
-
-	si[5] = uint64(s[5] + 0.5)
-	s0, _ = bits.Mul64(si[5], bredP)
-	si[5] = si[5] - s0*q
-
-	si[2] = uint64(s[2] + 0.5)
-	s0, _ = bits.Mul64(si[2], bredP)
-	si[2] = si[2] - s0*q
-
-	si[6] = uint64(s[6] + 0.5)
-	s0, _ = bits.Mul64(si[6], bredP)
-	si[6] = si[6] - s0*q
-
-	si[3] = uint64(s[3] + 0.5)
-	s0, _ = bits.Mul64(si[3], bredP)
-	si[3] = si[3] - s0*q
-
-	si[7] = uint64(s[7] + 0.5)
-	s0, _ = bits.Mul64(si[7], bredP)
-	si[7] = si[7] - s0*q
 
 	qqip = alphaimodp[0]
 
@@ -410,23 +370,56 @@ func multSum(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7
 		mhi, mlo = bits.Mul64(y7[i], qqip)
 		rlo[7], c = bits.Add64(rlo[7], mlo, 0)
 		rhi[7] += mhi + c
-
-		// rlo[0], rhi[0] = muladd64(y0[i], qqip, rlo[0], rhi[0])
-
-		// rlo[4], rhi[4] = muladd64(y4[i], qqip, rlo[4], rhi[4])
-
-		// rlo[1], rhi[1] = muladd64(y1[i], qqip, rlo[1], rhi[1])
-
-		// rlo[5], rhi[5] = muladd64(y5[i], qqip, rlo[5], rhi[5])
-
-		// rlo[2], rhi[2] = muladd64(y2[i], qqip, rlo[2], rhi[2])
-
-		// rlo[6], rhi[6] = muladd64(y6[i], qqip, rlo[6], rhi[6])
-
-		// rlo[3], rhi[3] = muladd64(y3[i], qqip, rlo[3], rhi[3])
-
-		// rlo[7], rhi[7] = muladd64(y7[i], qqip, rlo[7], rhi[7])
 	}
+
+	var s [8]float64
+	for i := 0; i < level+1; i++ {
+
+		beta := betaioverqi[i]
+
+		s[0] = math.FMA(float64(y0[i]), beta, s[0])
+		s[4] = math.FMA(float64(y4[i]), beta, s[4])
+		s[1] = math.FMA(float64(y1[i]), beta, s[1])
+		s[5] = math.FMA(float64(y5[i]), beta, s[5])
+		s[2] = math.FMA(float64(y2[i]), beta, s[2])
+		s[6] = math.FMA(float64(y6[i]), beta, s[6])
+		s[3] = math.FMA(float64(y3[i]), beta, s[3])
+		s[7] = math.FMA(float64(y7[i]), beta, s[7])
+	}
+	var si [8]uint64
+	var s0 uint64
+
+	si[0] = uint64(s[0] + 0.5)
+	s0, _ = bits.Mul64(si[0], bredP)
+	si[0] = si[0] - s0*q
+
+	si[4] = uint64(s[4] + 0.5)
+	s0, _ = bits.Mul64(si[4], bredP)
+	si[4] = si[4] - s0*q
+
+	si[1] = uint64(s[1] + 0.5)
+	s0, _ = bits.Mul64(si[1], bredP)
+	si[1] = si[1] - s0*q
+
+	si[5] = uint64(s[5] + 0.5)
+	s0, _ = bits.Mul64(si[5], bredP)
+	si[5] = si[5] - s0*q
+
+	si[2] = uint64(s[2] + 0.5)
+	s0, _ = bits.Mul64(si[2], bredP)
+	si[2] = si[2] - s0*q
+
+	si[6] = uint64(s[6] + 0.5)
+	s0, _ = bits.Mul64(si[6], bredP)
+	si[6] = si[6] - s0*q
+
+	si[3] = uint64(s[3] + 0.5)
+	s0, _ = bits.Mul64(si[3], bredP)
+	si[3] = si[3] - s0*q
+
+	si[7] = uint64(s[7] + 0.5)
+	s0, _ = bits.Mul64(si[7], bredP)
+	si[7] = si[7] - s0*q
 
 	res[0] = montLazyAdd(rhi[0], rlo[0], si[0], q, qInv)
 	res[4] = montLazyAdd(rhi[4], rlo[4], si[4], q, qInv)

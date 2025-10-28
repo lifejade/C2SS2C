@@ -199,130 +199,147 @@ func Test_Transpose(t *testing.T) {
 func Test_Transpose2(t *testing.T) {
 
 	//CPU full power
-	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 
-	//ckks parameter init
-	SchemeParams := hefloat.ParametersLiteral{
-		// CIFAR-10
-		// index [0]
-		// logN = 16, full slots
-		// logq = 51, logp = 46
-		// scale = 1<<46
-		// # special modulus = 3
-		// # available levels = 16
-		LogN:            16,
-		LogQ:            []int{51, 46, 46, 46},
-		LogP:            []int{51},
-		LogDefaultScale: 46,
-	}
+	test := func(level int) {
+		logq := []int{51}
+		for range level {
+			logq = append(logq, 51)
+		}
+		//ckks parameter init
+		SchemeParams := hefloat.ParametersLiteral{
+			// CIFAR-10
+			// index [0]
+			// logN = 16, full slots
+			// logq = 51, logp = 46
+			// scale = 1<<46
+			// # special modulus = 3
+			// # available levels = 16
+			LogN:            10,
+			LogQ:            logq,
+			LogP:            []int{51},
+			LogDefaultScale: 46,
+		}
 
-	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("ckks parameter init end")
-
-	// generate keys
-	//fmt.Println("generate keys")
-	//keytime := time.Now()
-	kgen := rlwe.NewKeyGenerator(params)
-	sk := kgen.GenSecretKeyNew()
-
-	n := 1 << params.LogMaxSlots()
-
-	var pk *rlwe.PublicKey
-	var rlk *rlwe.RelinearizationKey
-	var rtk []*rlwe.GaloisKey
-
-	fmt.Println("generated bootstrapper end")
-	pk = kgen.GenPublicKeyNew(sk)
-	rlk = kgen.GenRelinearizationKeyNew(sk)
-
-	// generate keys - Rotating key
-	galEls := make([]uint64, 1)
-	for i := range galEls {
-		galEls[i] = uint64(2*i + 1)
-	}
-	galEls = append(galEls, params.GaloisElementForComplexConjugation())
-
-	rtk = make([]*rlwe.GaloisKey, len(galEls))
-	starttime := time.Now()
-	var wg sync.WaitGroup
-	wg.Add(len(galEls))
-	for i := range galEls {
-		i := i
-
-		go func() {
-			defer wg.Done()
-			kgen_ := rlwe.NewKeyGenerator(params)
-			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
-		}()
-	}
-	wg.Wait()
-	elapse := time.Since(starttime)
-	fmt.Println(elapse)
-	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
-	//generate -er
-	encryptor := rlwe.NewEncryptor(params, pk)
-	decryptor := rlwe.NewDecryptor(params, sk)
-	encoder := hefloat.NewEncoder(params)
-	evaluator := hefloat.NewEvaluator(params, evk)
-
-	fmt.Println("generate Evaluator end")
-
-	_, _, _, _ = encoder, encryptor, decryptor, evaluator
-
-	fmt.Println("key list:")
-	fmt.Println(evaluator.EvaluationKeySet.GetGaloisKeysList())
-	fmt.Println(len(evaluator.EvaluationKeySet.GetGaloisKeysList()))
-
-	value := make([]float64, 2*n)
-	for i := range value {
-		value[i] = 0.001 * float64(i)
-	}
-
-	pt := hefloat.NewPlaintext(params, params.MaxLevel())
-	pt.IsBatched = false
-
-	encoder.Encode(value, pt)
-	ct, _ := encryptor.EncryptNew(pt)
-	params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[0],ct.Value[0])
-	params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[1],ct.Value[1])
-	cts := make([]*rlwe.Ciphertext, 2*n)
-	for i := range cts {
-		cts[i] = ct
-	}
-	fmt.Println("ctgen end")
-
-	result := TransposeInplace(cts, params, evaluator, encoder, 2*n)
-
-	reval := make([][]float64, 2*n)
-	for i := range reval {
-		reval[i] = make([]float64, 2*n)
-		dept := decryptor.DecryptNew(result[i])
-		err := encoder.Decode(dept, reval[i])
+		params, err := hefloat.NewParametersFromLiteral(SchemeParams)
 		if err != nil {
-			fmt.Println(err)
+			panic(err)
 		}
-	}
+		fmt.Println("ckks parameter init end")
 
-	for i := range 2 * n {
-		if i > 3 {
-			break
+		// generate keys
+		//fmt.Println("generate keys")
+		//keytime := time.Now()
+		kgen := rlwe.NewKeyGenerator(params)
+		sk := kgen.GenSecretKeyNew()
+
+		n := 1 << params.LogMaxSlots()
+
+		var pk *rlwe.PublicKey
+		var rlk *rlwe.RelinearizationKey
+		var rtk []*rlwe.GaloisKey
+
+		fmt.Println("generated bootstrapper end")
+		pk = kgen.GenPublicKeyNew(sk)
+		rlk = kgen.GenRelinearizationKeyNew(sk)
+
+		// generate keys - Rotating key
+		galEls := make([]uint64, 2*n+1)
+		for i := range galEls {
+			galEls[i] = uint64(2*i + 1)
 		}
-		fmt.Println(reval[i][0:10])
-	}
+		galEls = append(galEls, params.GaloisElementForComplexConjugation())
 
-	fmt.Println("check all")
-	for i := range 2 * n {
-		for j := range 2 * n {
-			if int(math.Round(reval[i][j]*1000)) != i {
-				fmt.Println("err : ", i, j, reval[i][j])
+		rtk = make([]*rlwe.GaloisKey, len(galEls))
+		starttime := time.Now()
+		var wg sync.WaitGroup
+		wg.Add(len(galEls))
+		for i := range galEls {
+			i := i
 
+			go func() {
+				defer wg.Done()
+				kgen_ := rlwe.NewKeyGenerator(params)
+				rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+			}()
+		}
+		wg.Wait()
+		elapse := time.Since(starttime)
+		fmt.Println(elapse)
+		evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+		//generate -er
+		encryptor := rlwe.NewEncryptor(params, pk)
+		decryptor := rlwe.NewDecryptor(params, sk)
+		encoder := hefloat.NewEncoder(params)
+		evaluator := hefloat.NewEvaluator(params, evk)
+
+		fmt.Println("generate Evaluator end")
+
+		_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+		fmt.Println("key list:")
+		fmt.Println(evaluator.EvaluationKeySet.GetGaloisKeysList())
+		fmt.Println(len(evaluator.EvaluationKeySet.GetGaloisKeysList()))
+
+		value := make([]float64, 2*n)
+		for i := range value {
+			value[i] = 0.001 * float64(i)
+		}
+
+		pt := hefloat.NewPlaintext(params, params.MaxLevel())
+		pt.IsBatched = false
+
+		encoder.Encode(value, pt)
+		cts := make([]*rlwe.Ciphertext, 2*n)
+		ct, _ := encryptor.EncryptNew(pt)
+		params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[0], ct.Value[0])
+		params.RingQ().AtLevel(ct.Level()).INTT(ct.Value[1], ct.Value[1])
+		for i := range cts {
+			cts[i] = ct.CopyNew()
+		}
+		fmt.Println("ctgen end")
+
+		result := Transpose2(cts, params, evaluator, 2*n)
+
+		reval := make([][]float64, 2*n)
+		for i := range reval {
+			reval[i] = make([]float64, 2*n)
+			params.RingQ().AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
+			params.RingQ().AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+			dept := decryptor.DecryptNew(result[i])
+			err := encoder.Decode(dept, reval[i])
+			if err != nil {
+				fmt.Println(err)
 			}
 		}
+
+		for i := range 2 * n {
+			if i > 3 {
+				break
+			}
+			fmt.Println(reval[i][0:10])
+		}
 	}
+
+	levels := []int{0}
+	for _, v := range levels {
+		fmt.Println("//////////////////////////////////////////////////////////////////////")
+		fmt.Println("level :", v)
+		test(v)
+		runtime.GC()
+		fmt.Println("//////////////////////////////////////////////////////////////////////")
+	}
+
+	// fmt.Println("check all")
+	// for i := range 2 * n {
+	// 	for j := range 2 * n {
+	// 		if int(math.Round(reval[i][j]*1000)) != i {
+	// 			fmt.Println("err : ", i, j, reval[i][j])
+
+	// 		}
+	// 	}
+	// }
 }
 
 func Test_ScalarCoeffMul(t *testing.T) {
@@ -573,8 +590,8 @@ func Test_Tweak(t *testing.T) {
 		// scale = 1<<46
 		// # special modulus = 3
 		// # available levels = 16
-		LogN:            10,
-		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
+		LogN:            16,
+		LogQ:            []int{51},
 		LogP:            []int{51},
 		LogDefaultScale: 46,
 	}
@@ -636,65 +653,87 @@ func Test_Tweak(t *testing.T) {
 	_, _, _, _ = encoder, encryptor, decryptor, evaluator
 
 	n := 1 << params.LogMaxSlots()
-	tweakN := 4
+	tweakN := 2 * n
 	value := make([]float64, 2*n)
-	value2 := make([]float64, 2*n)
-	value3 := make([]float64, 2*n)
-	value4 := make([]float64, 2*n)
-	for i := range value {
-		switch i % 4 {
-		case 0:
-			value[i] = 0.1
-			value2[i] = 0.5
-			value3[i] = 0.01
-			value4[i] = 0.6
-		case 1:
-			value[i] = 0.7
-			value2[i] = 0.1
-			value3[i] = 0.07
-			value4[i] = 0.3
-		case 2:
-			value[i] = 0.11
-			value2[i] = 0.1
-			value3[i] = 0.09
-			value4[i] = 0.3
-		case 3:
-			value[i] = 0.4
-			value2[i] = 0.9
-			value3[i] = 0.1
-			value4[i] = 0.9
-		}
-	}
+	// value2 := make([]float64, 2*n)
+	// value3 := make([]float64, 2*n)
+	// value4 := make([]float64, 2*n)
+	// for i := range value {
+	// 	switch i % 4 {
+	// 	case 0:
+	// 		value[i] = 0.1
+	// 		value2[i] = 0.5
+	// 		value3[i] = 0.01
+	// 		value4[i] = 0.6
+	// 	case 1:
+	// 		value[i] = 0.7
+	// 		value2[i] = 0.1
+	// 		value3[i] = 0.07
+	// 		value4[i] = 0.3
+	// 	case 2:
+	// 		value[i] = 0.11
+	// 		value2[i] = 0.1
+	// 		value3[i] = 0.09
+	// 		value4[i] = 0.3
+	// 	case 3:
+	// 		value[i] = 0.4
+	// 		value2[i] = 0.9
+	// 		value3[i] = 0.1
+	// 		value4[i] = 0.9
+	// 	}
+	// }
 
 	pt := hefloat.NewPlaintext(params, params.MaxLevel())
 	pt.IsBatched = false
 
+	ringQ := params.RingQ().AtLevel(pt.Level())
+
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
-	encoder.Encode(value2, pt)
-	ct2, _ := encryptor.EncryptNew(pt)
-	encoder.Encode(value3, pt)
-	ct3, _ := encryptor.EncryptNew(pt)
-	encoder.Encode(value4, pt)
-	ct4, _ := encryptor.EncryptNew(pt)
+	// encoder.Encode(value2, pt)
+	// ct2, _ := encryptor.EncryptNew(pt)
+	// encoder.Encode(value3, pt)
+	// ct3, _ := encryptor.EncryptNew(pt)
+	// encoder.Encode(value4, pt)
+	// ct4, _ := encryptor.EncryptNew(pt)
+
+	ringQ.INTT(ct.Value[0], ct.Value[0])
+	ringQ.INTT(ct.Value[1], ct.Value[1])
+	// ringQ.INTT(ct2.Value[0], ct2.Value[0])
+	// ringQ.INTT(ct2.Value[1], ct2.Value[1])
+	// ringQ.INTT(ct3.Value[0], ct3.Value[0])
+	// ringQ.INTT(ct3.Value[1], ct3.Value[1])
+	// ringQ.INTT(ct4.Value[0], ct4.Value[0])
+	// ringQ.INTT(ct4.Value[1], ct4.Value[1])
 
 	cts := make([]*rlwe.Ciphertext, tweakN)
 	for i := range cts {
-		switch i % 4 {
-		case 0:
-			cts[i] = ct.CopyNew()
-		case 1:
-			cts[i] = ct2.CopyNew()
-		case 2:
-			cts[i] = ct3.CopyNew()
-		case 3:
-			cts[i] = ct4.CopyNew()
-		}
+		// switch i % 4 {
+		// case 0:
+		// 	cts[i] = ct.CopyNew()
+		// case 1:
+		// 	cts[i] = ct2.CopyNew()
+		// case 2:
+		// 	cts[i] = ct3.CopyNew()
+		// case 3:
+		// 	cts[i] = ct4.CopyNew()
+		// }
+		cts[i] = ct.CopyNew()
 	}
+	printMemUsage()
 	fmt.Println("Tweak start")
-	results := Tweak2(cts, params, evaluator, encoder, tweakN)
-
+	starttime = time.Now()
+	// results := Tweak3(cts, params, evaluator, encoder, tweakN)
+	TweakInplace(cts, params, evaluator, tweakN)
+	results := cts
+	elapse = time.Since(starttime)
 	fmt.Println("Tweak End", len(results))
+	fmt.Println("elapse ", elapse)
+
+	for i := range results {
+		ringQ.NTT(results[i].Value[0], results[i].Value[0])
+		ringQ.NTT(results[i].Value[1], results[i].Value[1])
+	}
 
 	reval := make([][]float64, tweakN)
 	for i := range reval {
@@ -706,9 +745,7 @@ func Test_Tweak(t *testing.T) {
 		}
 	}
 
-	for i := range tweakN {
-		fmt.Println(reval[i][0:10])
-	}
+	fmt.Println(reval[0][0:10])
 
 	// for i := range reval {
 	// 	for j := range reval {
@@ -717,6 +754,103 @@ func Test_Tweak(t *testing.T) {
 	// 		}
 	// 	}
 	// }
+}
+
+func Test_INTTAdd(t *testing.T) {
+
+	//CPU full power
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            10,
+		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
+		LogP:            []int{51},
+		LogDefaultScale: 46,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	n := 1 << params.LogMaxSlots()
+	fmt.Println("degree : ", n*2)
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+	fmt.Println(params.GaloisElementForComplexConjugation())
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	value := make([]float64, 2*n)
+	for i := range value {
+		value[i] = 0.001 * float64(i)
+	}
+
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt.IsBatched = false
+
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+	ct2, _ := encryptor.EncryptNew(pt)
+	ringQ := params.RingQ().AtLevel(ct.Level())
+	ringQ.INTT(ct.Value[0], ct.Value[0])
+	ringQ.INTT(ct.Value[1], ct.Value[1])
+	ringQ.INTT(ct2.Value[0], ct2.Value[0])
+	ringQ.INTT(ct2.Value[1], ct2.Value[1])
+
+	res, _ := evaluator.SubNew(ct, ct2)
+	ringQ.NTT(res.Value[0], res.Value[0])
+	ringQ.NTT(res.Value[1], res.Value[1])
+
+	dept := decryptor.DecryptNew(res)
+	encoder.Decode(dept, value)
+
+	fmt.Println(value[:10])
+
 }
 
 func Test_Shift(t *testing.T) {

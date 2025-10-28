@@ -2,6 +2,7 @@ package matmult
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -194,8 +195,8 @@ func Test_Basis3(t *testing.T) {
 	ringQ.AtLevel(1).INTT(ct.Value[1], ct.Value[1])
 
 	for i := range ct.Value {
-		fmt.Println("TT", ct.Value[i].Coeffs[0])
-		fmt.Println("TT", ct.Value[i].Coeffs[1])
+		fmt.Println("TT", ct.Value[i].Coeffs[0][:20])
+		fmt.Println("TT", ct.Value[i].Coeffs[1][:20])
 
 		p2 := ringP.NewPoly()
 		starttime := time.Now()
@@ -205,8 +206,8 @@ func Test_Basis3(t *testing.T) {
 		elapse := time.Since(starttime)
 		fmt.Println(elapse)
 
-		fmt.Println("TT", ct.Value[i].Coeffs[0])
-		fmt.Println("TT", ct.Value[i].Coeffs[1])
+		fmt.Println("TT", ct.Value[i].Coeffs[0][:20])
+		fmt.Println("TT", ct.Value[i].Coeffs[1][:20])
 	}
 
 	ringQ.AtLevel(1).NTT(ct.Value[0], ct.Value[0])
@@ -217,8 +218,8 @@ func Test_Basis3(t *testing.T) {
 	encoder.Decode(dept, values)
 	fmt.Println(ct.Level())
 	fmt.Println(ct.LogScale())
-	fmt.Println(value)
-	fmt.Println(values)
+	fmt.Println(value[:20])
+	fmt.Println(values[:20])
 
 }
 
@@ -336,4 +337,94 @@ func Test_Basis4(t *testing.T) {
 	fmt.Println(ct.Level())
 	fmt.Println(ct.LogScale())
 	fmt.Println(values)
+}
+
+func Test_BasisTime(t *testing.T) {
+	//CPU full power
+	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+	if pc, _, _, _ := runtime.Caller(0); pc != 0 {
+		fmt.Println(runtime.FuncForPC(pc).Name())
+	}
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		// logN = 13, full slots
+		// # special modulus = 1
+		// # available levels = 4
+		LogN:            16,
+		LogQ:            []int{50, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48},
+		LogP:            []int{50},
+		Xs:              ring.Ternary{H: 256},
+		LogDefaultScale: 40,
+	}
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	n := 1 << params.LogMaxSlots()
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	fmt.Println("ckks parameter init end")
+	Q := params.Q()
+	P := []uint64{14624959, 15092711, 16654291, 21552221, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841}
+	fmt.Println(len(P))
+	ringQ, _ := ring.NewRing(params.N(), Q[:1])
+	ringP, _ := ring.NewRing(params.N(), P)
+	be := NewBasisExtender(ringQ, ringP, []Key{{0, 33}}, []Key{{33, 0}})
+
+	value := make([]float64, n)
+	for i, _ := range value {
+		value[i] = sampling.RandFloat64(-1, 1)
+	}
+
+	pt := hefloat.NewPlaintext(params, 0)
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+
+	ringQ.AtLevel(0).INTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(0).INTT(ct.Value[1], ct.Value[1])
+
+	p0 := ringP.NewPoly()
+	p1 := ringP.NewPoly()
+
+	starttime := time.Now()
+	be.ModSwitchQtoP(0, 33, ct.Value[0], p0)
+	be.ModSwitchQtoP(0, 33, ct.Value[1], p1)
+	elapse := time.Since(starttime)
+	fmt.Println("Q to P time: ", elapse)
+
+	starttime = time.Now()
+	be.ModSwitchPtoQ(33, 0, p0, ct.Value[0])
+	be.ModSwitchPtoQ(33, 0, p1, ct.Value[1])
+	elapse = time.Since(starttime)
+	fmt.Println("P to Q time: ", elapse)
+
+	ringQ.AtLevel(0).NTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(0).NTT(ct.Value[1], ct.Value[1])
+
+	values := make([]float64, n)
+	dept := decryptor.DecryptNew(ct)
+	encoder.Decode(dept, values)
+	fmt.Println(ct.Level())
+	fmt.Println(ct.LogScale())
+	fmt.Println(value[:20])
+	fmt.Println(values[:20])
 }

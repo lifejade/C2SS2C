@@ -74,8 +74,8 @@ func genPrime(bits int) (*big.Int, error) {
 	return rand.Prime(rand.Reader, bits)
 }
 func Test_PrimeNonNTT(t *testing.T) {
-	k := 70
-	bits := 24
+	k := 40
+	bits := 22
 	seen := make(map[string]struct{}, k)
 	out := make([]*big.Int, 0, k)
 
