@@ -125,6 +125,31 @@ void multiply_mod_matrix_blas2(const double *restrict a,
     free(res);
 }
 
+
+void multiply_mod_matrix_blas_Inplace(const double *a,
+                         const double *b,
+                         double *result,
+                         const unsigned int  n_a,
+                         const unsigned int  n_b,
+                         const unsigned int  n_c,
+                         const unsigned int level)
+{
+    for(int i =0;i<level;i++){
+        cblas_dgemm(
+                CblasRowMajor,   // 메모리 저장 방식 (row-major)
+                CblasNoTrans,CblasNoTrans,    // A를 전치하지 않음
+                n_a, n_c,n_b,            // 행렬 A의 크기 (m x n)
+                1,           // 스케일 값 alpha
+                &(a[i*n_a*n_b]), n_b,            // 행렬 A와 leading dimension (n)
+                &(b[i*n_b*n_c]), n_c,            // 벡터 x와 stride
+                0,            // 스케일 값 beta
+                &(result[i*n_a*n_c]), n_c             // 결과 벡터 y와 stride
+        );
+    }
+}
+
+
+
 void mul64(unsigned long long x, unsigned long long y, unsigned long long *hi) {
 	const unsigned long long mask32 = 1<<32 - 1;
 	unsigned long long x0 = x & mask32;

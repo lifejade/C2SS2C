@@ -19,43 +19,6 @@ func Tweak(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eval
 
 	cts_ := make([]*rlwe.Ciphertext, n)
 	cts_[0] = cts[0].CopyNew()
-	logn := int(math.Floor(math.Log2(float64(n))))
-
-	for l := range logn {
-		powl := int(math.Pow(2, float64(l)))
-		temp := make([]*rlwe.Ciphertext, powl)
-		for j := range powl {
-			temp[j] = cts[(2*j+1)*n/(powl*2)].CopyNew()
-		}
-		aux := Tweak(temp, params, eval, encoder, powl)
-		for j := range powl {
-			arr := make([]float64, params.MaxSlots()*2)
-			arr[params.MaxSlots()*2/powl*j] = 1
-			pt := hefloat.NewPlaintext(params, params.MaxLevel())
-			pt.IsBatched = false
-			encoder.Encode(arr, pt)
-
-			tmp, _ := eval.MulNew(aux[j], pt)
-			if tmp.Level() == 0 {
-				fmt.Println("no")
-			}
-			eval.Rescale(tmp, tmp)
-
-			cts_[j+powl], _ = eval.SubNew(cts_[j], tmp)
-			cts_[j], _ = eval.AddNew(cts_[j], tmp)
-		}
-	}
-
-	return cts_
-}
-
-func Tweak2(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, encoder *hefloat.Encoder, n int) []*rlwe.Ciphertext {
-	if n == 1 {
-		return cts
-	}
-
-	cts_ := make([]*rlwe.Ciphertext, n)
-	cts_[0] = cts[0].CopyNew()
 	logn := int(math.Round(math.Log2(float64(n))))
 
 	ringQ := params.RingQ().AtLevel(cts[0].Level())
@@ -65,7 +28,7 @@ func Tweak2(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 		for j := range powl {
 			temp[j] = cts[((2*j+1)*n)/(powl*2)].CopyNew()
 		}
-		aux := Tweak2(temp, params, eval, encoder, powl)
+		aux := Tweak(temp, params, eval, encoder, powl)
 		for j := range powl {
 
 			//tmp, _ := eval.MulNew(aux[j], pt)
@@ -139,7 +102,7 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 	fmt.Println("mult by monomial", elapse)
 
 	starttime = time.Now()
-	aux := Tweak2(cts, params, eval, encoder, n)
+	aux := Tweak(cts, params, eval, encoder, n)
 	elapse = time.Since(starttime)
 	fmt.Println("TWEAK", elapse)
 
@@ -174,7 +137,7 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 	fmt.Println("Automorphism", elapse)
 
 	starttime = time.Now()
-	res2 := Tweak2(res, params, eval, encoder, n)
+	res2 := Tweak(res, params, eval, encoder, n)
 	result := make([]*rlwe.Ciphertext, n)
 	for i := range n {
 		ringQ.INTT(res2[i].Value[0], res2[i].Value[0])
@@ -197,6 +160,7 @@ func Transpose(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 	return result
 }
 
+// for test
 func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, n int) []*rlwe.Ciphertext {
 	cts := make([]*rlwe.Ciphertext, n)
 	ringQ := params.RingQ().AtLevel(inputs[0].Level())
@@ -220,18 +184,20 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 	fmt.Println("mult by monomial", elapse)
 
 	starttime = time.Now()
-	aux := Tweak3(cts, params, eval, ringQ, n)
+	aux := cts
+	// aux := Tweak3(cts, params, eval, ringQ, n)
 	elapse = time.Since(starttime)
 	fmt.Println("TWEAK", elapse)
 
 	starttime = time.Now()
 	res := make([]*rlwe.Ciphertext, n)
 	for i := range res {
+		st := time.Now()
 		idx, ch := ModInv(uint64(2*i+1), uint64(2*n))
 		if !ch {
 			fmt.Println("err ", i, " ", idx)
 		}
-		res[i] = aux[(idx-1)/2].CopyNew()
+		res[i] = aux[(idx-1)/2]
 
 		// ringQ.INTT(res[i].Value[0], res[i].Value[0])
 		// ringQ.INTT(res[i].Value[1], res[i].Value[1])
@@ -248,10 +214,14 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 		res[i].IsNTT = false
 
 		//uint64(2*i+1)
-		if err := eval.Automorphism(res[i], uint64(2*i+1), res[i]); err != nil {
+		if err := eval.Automorphism(res[i], uint64(21), res[i]); err != nil {
 			fmt.Println(err)
 		}
 		res[i].IsNTT = true
+		if i == 0 {
+			el := time.Since(st)
+			fmt.Println(el)
+		}
 	}
 	elapse = time.Since(starttime)
 	fmt.Println("Automorphism", elapse)
@@ -280,9 +250,10 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 	return result
 }
 
+// for test
 func Tweak3(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int) []*rlwe.Ciphertext {
 	if n == 1 {
-		return []*rlwe.Ciphertext{cts[0].CopyNew()}
+		return []*rlwe.Ciphertext{cts[0]}
 	}
 
 	out := make([]*rlwe.Ciphertext, n)
@@ -293,29 +264,24 @@ func Tweak3(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 	for l := 0; l < logn; l++ {
 		powl := 1 << l
 
-		// temp[j] = cts[idx(j,l)] 사전 구성
 		temp := make([]*rlwe.Ciphertext, powl)
 		den := powl * 2
 		for j := 0; j < powl; j++ {
-			// ((2*j+1)*n)/(powl*2)  인덱스는 [0,n) 보장
 			idx := ((2*j + 1) * n) / den
 			temp[j] = cts[idx]
 		}
 
 		aux := Tweak3(temp, params, eval, ringQ, powl)
 
-		// monomial shift 간결화: ((MaxSlots()*2)/powl) * j
 		step := (params.MaxSlots() * 2) / powl
 
 		for j := 0; j < powl; j++ {
-			// aux[j]를 보존하기 위해 복사 후 in-place shift
 			tmp := aux[j]
 
 			shift := step * j
 			ringQ.MultByMonomial(tmp.Value[0], shift, tmp.Value[0])
 			ringQ.MultByMonomial(tmp.Value[1], shift, tmp.Value[1])
 
-			// out[j]는 반드시 존재. out[j+powl]은 새로 생성.
 			sum, err := eval.AddNew(out[j], tmp)
 			if err != nil {
 				panic(fmt.Errorf("AddNew failed: %w", err))
@@ -332,52 +298,49 @@ func Tweak3(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 	return out
 }
 
-func Tweak3_(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int, result []*rlwe.Ciphertext) {
+
+func Tweak4(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int, work []*rlwe.Ciphertext, workOff int, out []*rlwe.Ciphertext, outOff int) {
+	out[outOff] = cts[0]
 	if n == 1 {
-		result[0] = cts[0].CopyNew()
 		return
 	}
 
-	out := make([]*rlwe.Ciphertext, n)
-	out[0] = cts[0]
-
 	logn := bits.Len(uint(n)) - 1
+	maxPowl := n / 2
+	tempBuf := work[workOff : workOff+maxPowl]
 
 	for l := 0; l < logn; l++ {
 		powl := 1 << l
-
-		temp := make([]*rlwe.Ciphertext, powl)
+		temp := tempBuf[:powl]
 		den := powl * 2
 		for j := 0; j < powl; j++ {
-			// ((2*j+1)*n)/(powl*2)  인덱스는 [0,n) 보장
 			idx := ((2*j + 1) * n) / den
 			temp[j] = cts[idx]
 		}
-
-		aux := Tweak3(temp, params, eval, ringQ, powl)
+		Tweak4(temp, params, eval, ringQ, powl, work, workOff+powl, out, outOff+powl)
+		res := out[outOff : outOff+n]
 
 		step := (params.MaxSlots() * 2) / powl
 
 		for j := 0; j < powl; j++ {
-			tmp := aux[j]
+			work[len(work)-1].Copy(res[powl+j])
+			tmp := work[len(work)-1]
 
 			shift := step * j
 			ringQ.MultByMonomial(tmp.Value[0], shift, tmp.Value[0])
 			ringQ.MultByMonomial(tmp.Value[1], shift, tmp.Value[1])
 
-			sum, err := eval.AddNew(out[j], tmp)
-			if err != nil {
-				panic(fmt.Errorf("AddNew failed: %w", err))
+			if err := eval.Sub(res[j], tmp, res[j+powl]); err != nil {
+				panic(fmt.Errorf("Sub failed: %w", err))
 			}
-			diff, err := eval.SubNew(out[j], tmp)
-			if err != nil {
-				panic(fmt.Errorf("SubNew failed: %w", err))
+
+			if err := eval.Add(res[j], tmp, res[j]); err != nil {
+				panic(fmt.Errorf("Add failed: %w", err))
 			}
-			out[j] = sum
-			out[j+powl] = diff
 		}
 	}
 }
+
 
 // TODO
 func TransposeInplace(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, encoder *hefloat.Encoder, n int) {
@@ -485,7 +448,7 @@ func TweakInplace(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 			idx := ((2*j + 1) * n) / den
 			temp[j] = snap[idx].CopyNew()
 		}
-		aux := Tweak2(temp, params, eval, nil, powl)
+		aux := Tweak(temp, params, eval, nil, powl)
 
 		for j := 0; j < powl; j++ {
 			tmp := aux[j].CopyNew()
@@ -504,9 +467,6 @@ func TweakInplace(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *heflo
 			cts[j] = sum
 			cts[j+powl] = diff
 		}
-		fmt.Println(l, " : ")
-		printMemUsage()
-		fmt.Println()
 	}
 }
 

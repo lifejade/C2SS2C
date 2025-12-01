@@ -352,7 +352,7 @@ func Test_BasisTime(t *testing.T) {
 		// # special modulus = 1
 		// # available levels = 4
 		LogN:            16,
-		LogQ:            []int{50, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48},
+		LogQ:            []int{48, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
 		LogP:            []int{50},
 		Xs:              ring.Ternary{H: 256},
 		LogDefaultScale: 40,
@@ -384,41 +384,41 @@ func Test_BasisTime(t *testing.T) {
 
 	fmt.Println("ckks parameter init end")
 	Q := params.Q()
-	P := []uint64{14624959, 15092711, 16654291, 21552221, 16108999, 13227197, 16099607, 14232433, 16704799, 15543343, 12965263, 13134193, 15297563, 13536821, 13918787, 12676193, 15142703, 14437559, 12631777, 13704083, 15632377, 14880601, 15491477, 16625353, 16231427, 13351381, 15831551, 15576611, 15039943, 16321373, 16651757, 16722103, 12801337, 13858841}
+	P := []uint64{4107427, 3868699, 4073143, 3639397, 3835109, 3377447, 3338903, 3314141, 3816173, 3731251, 3925091, 3500261, 3507403, 3368353, 3598601, 3637573, 3387523, 3489259, 3804751, 4002811, 3417251, 3245357, 3659177, 4047647, 3367981, 3984439, 3621473, 3565147, 3789193, 3174547, 3293959, 3567803, 3856499, 3299617, 3939619, 4004683, 3803347, 3501467, 3518719, 3631919}
 	fmt.Println(len(P))
-	ringQ, _ := ring.NewRing(params.N(), Q[:1])
+	ringQ, _ := ring.NewRing(params.N(), Q)
 	ringP, _ := ring.NewRing(params.N(), P)
-	be := NewBasisExtender(ringQ, ringP, []Key{{0, 33}}, []Key{{33, 0}})
+	be := NewBasisExtender(ringQ, ringP, []Key{{params.MaxLevel(), 35}}, []Key{{35, params.MaxLevel()}})
 
 	value := make([]float64, n)
 	for i, _ := range value {
 		value[i] = sampling.RandFloat64(-1, 1)
 	}
 
-	pt := hefloat.NewPlaintext(params, 0)
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
 
-	ringQ.AtLevel(0).INTT(ct.Value[0], ct.Value[0])
-	ringQ.AtLevel(0).INTT(ct.Value[1], ct.Value[1])
+	ringQ.AtLevel(params.MaxLevel()).INTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(params.MaxLevel()).INTT(ct.Value[1], ct.Value[1])
 
 	p0 := ringP.NewPoly()
 	p1 := ringP.NewPoly()
 
 	starttime := time.Now()
-	be.ModSwitchQtoP(0, 33, ct.Value[0], p0)
-	be.ModSwitchQtoP(0, 33, ct.Value[1], p1)
+	be.ModSwitchQtoP(params.MaxLevel(), 35, ct.Value[0], p0)
+	be.ModSwitchQtoP(params.MaxLevel(), 35, ct.Value[1], p1)
 	elapse := time.Since(starttime)
 	fmt.Println("Q to P time: ", elapse)
 
 	starttime = time.Now()
-	be.ModSwitchPtoQ(33, 0, p0, ct.Value[0])
-	be.ModSwitchPtoQ(33, 0, p1, ct.Value[1])
+	be.ModSwitchPtoQ(35, params.MaxLevel(), p0, ct.Value[0])
+	be.ModSwitchPtoQ(35, params.MaxLevel(), p1, ct.Value[1])
 	elapse = time.Since(starttime)
 	fmt.Println("P to Q time: ", elapse)
 
-	ringQ.AtLevel(0).NTT(ct.Value[0], ct.Value[0])
-	ringQ.AtLevel(0).NTT(ct.Value[1], ct.Value[1])
+	ringQ.AtLevel(params.MaxLevel()).NTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(params.MaxLevel()).NTT(ct.Value[1], ct.Value[1])
 
 	values := make([]float64, n)
 	dept := decryptor.DecryptNew(ct)

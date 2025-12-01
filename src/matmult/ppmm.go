@@ -618,6 +618,39 @@ func PPMM_Blas_CRT(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n
 	}
 }
 
+func PPMM_Blas_CRT_Inplace(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, level, degree int, ringP *ring.Ring, buffer1, buffer2 []float64) {
+	P := ringP.ModuliChain()
+	_ = P
+
+	for d := range degree {
+		index := 0
+		for i := range level {
+			for j := range n_b {
+				coeff := cts[d][j].Coeffs[i]
+				for k := range n_c {
+					buffer1[index] = float64(coeff[k])
+					index++
+				}
+			}
+		}
+
+		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+
+		index = 0
+		for i := range level {
+			p := P[i]
+			for j := range n_b {
+				coeff := cts[d][j].Coeffs[i]
+				for k := range n_c {
+					coeff[k] = uint64(buffer2[index]) % p
+					index++
+				}
+			}
+		}
+	}
+
+}
+
 func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n_a, n_b, n_c, level int, bred []uint64, ringP *ring.Ring, result []ring.Poly) {
 	a := make([][][]uint64, level)
 	for j := range level {
