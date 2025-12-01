@@ -341,6 +341,148 @@ func Test_ModSwitchTime(t *testing.T) {
 	fmt.Println(values)
 }
 
+func Test_ModSwitchTime2(t *testing.T) {
+	//CPU full power
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		// logN = 13, full slots
+		// # special modulus = 1
+		// # available levels = 4
+		LogN:            16,
+		LogQ:            []int{48, 48, 48},
+		LogP:            []int{50},
+		Xs:              ring.Ternary{H: 256},
+		LogDefaultScale: 40,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	n := params.N()
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	fmt.Println("N is this  : ", n)
+	value := make([]float64, n)
+	for i, _ := range value {
+		value[i] = 0.1
+	}
+
+	size := 1 << 5
+	scale := float64(1 << 5)
+	u := make([]float64, 7*size*size)
+	for i := range 7 {
+		for j := range size {
+			for k := range size {
+				u[i*size*size+j*size+k] = float64(uint64(0.2 * scale))
+			}
+		}
+	}
+
+	pt := hefloat.NewPlaintext(params, 2)
+	pt.IsBatched = false
+	P := []uint64{12451841, 14155777, 13631489, 16384001, 13238273, 8650753, 16121857}
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+	ringQ := params.RingQ().AtLevel(ct.Level())
+	ringP, _ := ring.NewRing(params.N(), P)
+
+	be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{From: 2, To: 6}}, []matmult.Key{{From: 6, To: 2}})
+
+	rings := make([][]ring.Poly, 2)
+	for i := range rings {
+		rings[i] = make([]ring.Poly, size)
+		for j := range rings[i] {
+			rings[i][j] = ringP.NewPoly()
+		}
+	}
+
+	ctIn := ct.CopyNew()
+	ringQ.INTT(ctIn.Value[0], ctIn.Value[0])
+	ringQ.INTT(ctIn.Value[1], ctIn.Value[1])
+
+	for idx := range 2 {
+		for i := range rings[idx] {
+			be.ModSwitchQtoP(2, 6, ctIn.Value[idx], rings[idx][i])
+		}
+	}
+	buffer1 := make([]float64, 7*params.N()*size)
+	buffer2 := make([]float64, 7*params.N()*size)
+
+	starttime = time.Now()
+	matmult.PPMM_Blas_CRT_Inplace(rings, u, size, size, params.N(), 7, 2, ringP, buffer1, buffer2)
+	elapse = time.Since(starttime)
+	fmt.Println("PPMM Time : ", elapse)
+	fmt.Println(ringP.ModuliChain()[0])
+
+	for idx := range 2 {
+		be.ModSwitchPtoQ(6, 2, rings[idx][0], ctIn.Value[idx])
+	}
+	sc := rlwe.NewScale(ringQ.ModuliChain()[2])
+
+	Mul2_(evaluator, ctIn, 1/scale, ctIn, sc)
+	Rescale_NonNTT(evaluator, ctIn, ctIn)
+
+	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[0], ctIn.Value[0])
+	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[1], ctIn.Value[1])
+
+	values := make([]float64, n)
+
+	dept := decryptor.DecryptNew(ctIn)
+	encoder.Decode(dept, values)
+
+	fmt.Println(values)
+}
 func Test_ModSwitch2(t *testing.T) {
 	//CPU full power
 	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
