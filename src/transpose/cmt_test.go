@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
@@ -1121,7 +1122,7 @@ func Test_TransSparse(t *testing.T) {
 
 	//ckks parameter init
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            10,
+		LogN:            5,
 		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
 		LogP:            []int{51},
 		LogDefaultScale: 46,
@@ -1184,10 +1185,11 @@ func Test_TransSparse(t *testing.T) {
 	_, _, _, _ = encoder, encryptor, decryptor, evaluator
 
 	value := make([]float64, n)
-	ratio := 2
+	ratio := 8
 	sparseN := n / ratio
 	for i := range value {
 		if i%ratio != 0 {
+			value[i] = 0
 			continue
 		}
 		value[i] = 0.001 * float64(i)
@@ -1203,136 +1205,47 @@ func Test_TransSparse(t *testing.T) {
 	ringQ.INTT(ct.Value[0], ct.Value[0])
 	ringQ.INTT(ct.Value[1], ct.Value[1])
 
-	ninv := ringQ.NewRNSScalarFromUInt64(uint64(sparseN))
-	ringQ.MFormRNSScalar(ninv, ninv)
-	ringQ.Inverse(ninv)
-
-	idxarr := make([]uint64, sparseN)
-
-	for i := range idxarr {
-		idx, ch := ModInv(uint64(2*i+1), uint64(2*sparseN))
-		_ = ch
-		idxarr[i] = idx
-	}
-
 	cts := make([]*rlwe.Ciphertext, sparseN)
 	for i := range cts {
 		cts[i] = ct.CopyNew()
-
-	}
-
-	starttime = time.Now()
-	for i := range cts {
-		ringQ.MultByMonomial(cts[i].Value[0], i*ratio, cts[i].Value[0])
-		ringQ.MultByMonomial(cts[i].Value[1], i*ratio, cts[i].Value[1])
 	}
 	elapse = time.Since(starttime)
 	fmt.Println("mult mono : ", elapse)
 	total := elapse
 
 	starttime = time.Now()
-	aux := Tweak3(cts, params, evaluator, ringQ, sparseN)
-	elapse = time.Since(starttime)
-	fmt.Println("tweak1 : ", elapse)
-	total += elapse
-
-	// var except time.Duration
-	starttime = time.Now()
-	res := make([]*rlwe.Ciphertext, sparseN)
-	for i := range res {
-		st := time.Now()
-		res[i] = aux[(idxarr[i]-1)/2].CopyNew()
-
-		// ringQ.MForm(res[i].Value[0], res[i].Value[0])
-		// ringQ.MForm(res[i].Value[1], res[i].Value[1])
-
-		// ringQ.MulRNSScalarMontgomery(res[i].Value[0], ninv, res[i].Value[0])
-		// ringQ.MulRNSScalarMontgomery(res[i].Value[1], ninv, res[i].Value[1])
-
-		// ringQ.IMForm(res[i].Value[0], res[i].Value[0])
-		// ringQ.IMForm(res[i].Value[1], res[i].Value[1])
-
-		res[i].IsNTT = false
-
-		if i == 255 || i == 3 {
-			el := time.Since(st)
-			fmt.Println(el)
-			st = time.Now()
-		}
-		galEl := uint64((2*i + 1))
-		var gk *rlwe.GaloisKey
-		if gk, err = evaluator.CheckAndGetGaloisKey(galEl); err != nil {
-			fmt.Println("cannot apply Automorphism:", err)
-		}
-		Automorphism(evaluator, ringQ, res[i], galEl, gk, res[i])
-
-		res[i].IsNTT = true
-		if i == 255 || i == 3 {
-			el := time.Since(st)
-			fmt.Println(el)
-		}
-
-	}
-	elapse = time.Since(starttime)
-	fmt.Println("auto : ", elapse)
-	total += elapse
-
 	work := make([]*rlwe.Ciphertext, sparseN)
-	res2 := make([]*rlwe.Ciphertext, sparseN)
-	copy(work, res)
-	copy(res2, res)
-	starttime = time.Now()
-	Tweak3_check3(res, params, evaluator, ringQ, sparseN, work, 0, res2, 0)
-	// res2 = Tweak3(res, params, evaluator, ringQ, sparseN)
-	elapse = time.Since(starttime)
-	fmt.Println("tweak2 : ", elapse)
-	total += elapse
-
-	result := make([]*rlwe.Ciphertext, sparseN)
-	starttime = time.Now()
-	for idx := range sparseN {
-		// idx := i / ratio
-		i := idx * ratio
-
-		ringQ.MultByMonomial(res2[idx].Value[0], i, res2[idx].Value[0])
-		ringQ.MultByMonomial(res2[idx].Value[1], i, res2[idx].Value[1])
-		if i != 0 {
-			ringQ.Neg(res2[idx].Value[0], res2[idx].Value[0])
-			ringQ.Neg(res2[idx].Value[1], res2[idx].Value[1])
-		}
-		result[(sparseN-idx)%(sparseN)] = res2[idx]
+	aux := make([]*rlwe.Ciphertext, sparseN)
+	ctzero := util.CtZero(params, encoder, encryptor)
+	for i := range work {
+		work[i] = ctzero.CopyNew()
+		aux[i] = ctzero.CopyNew()
 	}
-	elapse = time.Since(starttime)
-	fmt.Println("mult mono : ", elapse)
+	starttime = time.Now()
+	Transpose_Sparse(cts, params, evaluator, ringQ, n, sparseN, work, aux, cts)
+	// for i := range work {
+	// 	work[i] = ctzero.CopyNew()
+	// 	aux[i] = ctzero.CopyNew()
+	// }
+	// Transpose_Sparse(cts, params, evaluator, ringQ, n, sparseN, work, aux, cts)
 	total += elapse
 	fmt.Println("total time : ", total)
 
 	reval := make([][]float64, sparseN)
 	for i := range reval {
 		reval[i] = make([]float64, n)
-		ringQ.NTT(result[i].Value[0], result[i].Value[0])
-		ringQ.NTT(result[i].Value[1], result[i].Value[1])
-		evaluator.Mul(result[i], 1.0/float64(sparseN), result[i])
-		evaluator.Rescale(result[i], result[i])
+		ringQ.NTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.NTT(cts[i].Value[1], cts[i].Value[1])
+		evaluator.Mul(cts[i], 1.0/float64(sparseN), cts[i])
+		// evaluator.Mul(cts[i], 1.0/float64(sparseN), cts[i])
+		evaluator.Rescale(cts[i], cts[i])
 
-		dept := decryptor.DecryptNew(result[i])
+		dept := decryptor.DecryptNew(cts[i])
 		err := encoder.Decode(dept, reval[i])
 		if err != nil {
 			fmt.Println(err)
 		}
-	}
-
-	fmt.Println("check all")
-	for i := range sparseN {
-		for j := range n {
-			if (j % ratio) != 0 {
-				if int(math.Round(reval[i][j]*1000)) != 0 {
-					fmt.Println("err! : ", i, j, reval[i][j])
-				}
-			} else if int(math.Round(reval[i][j]*1000)) != i*ratio {
-				fmt.Println("err : ", i, j, reval[i][j])
-			}
-		}
+		fmt.Println(reval[i])
 	}
 
 }
@@ -1588,30 +1501,6 @@ func Test_TransSparse2(t *testing.T) {
 	// 	fmt.Println("///////////////////////////////////////////////////////////////////////")
 	// }
 
-}
-
-func Automorphism(eval *hefloat.Evaluator, ringQ *ring.Ring, ctIn *rlwe.Ciphertext, galEl uint64, evk *rlwe.GaloisKey, opOut *rlwe.Ciphertext) {
-
-	if galEl == 1 {
-		if opOut != ctIn {
-			opOut.Copy(ctIn)
-		}
-		return
-	}
-
-	level := ctIn.Level()
-
-	ctTmp := &rlwe.Ciphertext{Element: rlwe.Element[ring.Poly]{Value: []ring.Poly{eval.BuffQP[0].Q, eval.BuffQP[1].Q}}}
-	ctTmp.MetaData = ctIn.MetaData
-
-	eval.GadgetProduct(level, ctIn.Value[1], &evk.GadgetCiphertext, ctTmp)
-
-	ringQ.Add(ctTmp.Value[0], ctIn.Value[0], ctTmp.Value[0])
-
-	ringQ.Automorphism(ctTmp.Value[0], galEl, opOut.Value[0])
-	ringQ.Automorphism(ctTmp.Value[1], galEl, opOut.Value[1])
-
-	*opOut.MetaData = *ctIn.MetaData
 }
 
 func Test_Transpose3(t *testing.T) {
@@ -2693,7 +2582,7 @@ func Test_TransSparse3(t *testing.T) {
 		cts := make([]*rlwe.Ciphertext, sparseN)
 		for i := range cts {
 			if ratio < 64 {
-				cts[i] = ct
+				cts[i] = ct.CopyNew()
 			} else {
 				cts[i] = ct.CopyNew()
 			}
@@ -2703,7 +2592,7 @@ func Test_TransSparse3(t *testing.T) {
 		work := make([]*rlwe.Ciphertext, sparseN)
 		for i := range work {
 			if ratio < 64 {
-				work[i] = ct
+				work[i] = ct.CopyNew()
 			} else {
 				work[i] = ct.CopyNew()
 			}
@@ -2711,17 +2600,17 @@ func Test_TransSparse3(t *testing.T) {
 		aux := make([]*rlwe.Ciphertext, sparseN)
 		for i := range aux {
 			if ratio < 64 {
-				aux[i] = ct
+				aux[i] = ct.CopyNew()
 			} else {
 				aux[i] = ct.CopyNew()
 			}
 		}
 
 		starttime := time.Now()
-		for i := range cts {
-			ringQ.MultByMonomial(cts[i].Value[0], i*ratio, cts[i].Value[0])
-			ringQ.MultByMonomial(cts[i].Value[1], i*ratio, cts[i].Value[1])
-		}
+		// for i := range cts {
+		// 	ringQ.MultByMonomial(cts[i].Value[0], i*ratio, cts[i].Value[0])
+		// 	ringQ.MultByMonomial(cts[i].Value[1], i*ratio, cts[i].Value[1])
+		// }
 		elapse := time.Since(starttime)
 		fmt.Println("mult mono : ", elapse)
 		total := elapse
@@ -2750,13 +2639,13 @@ func Test_TransSparse3(t *testing.T) {
 
 			res[i].IsNTT = false
 
-			exctime := time.Now()
-			galEl := uint64((2*i + 1))
-			kgen_ := rlwe.NewKeyGenerator(params)
-			gk := kgen_.GenGaloisKeyNew(galEl, sk)
-			_ = gk
-			except += time.Since(exctime)
-			Automorphism(evaluator, ringQ, res[i], galEl, gk, res[i])
+			// exctime := time.Now()
+			// galEl := uint64((2*i + 1))
+			// kgen_ := rlwe.NewKeyGenerator(params)
+			// gk := kgen_.GenGaloisKeyNew(galEl, sk)
+			// _ = gk
+			// except += time.Since(exctime)
+			// Automorphism(evaluator, ringQ, res[i], galEl, gk, res[i])
 
 			// if i == 255 || i == 3 {
 			// 	el := time.Since(st)
@@ -2841,7 +2730,278 @@ func Test_TransSparse3(t *testing.T) {
 	}
 	// testing(256)
 
-	ratio := 4
+	ratio := 16
+	for range 1 {
+		ratio >>= 1
+		testing(ratio)
+		runtime.GC()
+		fmt.Println("///////////////////////////////////////////////////////////////////////")
+	}
+
+}
+
+func BenchmarkTweak4(t *testing.B) {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            16,
+		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
+		LogP:            []int{51},
+		LogDefaultScale: 46,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	n := 1 << params.LogN()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	galLen := 1
+	fmt.Println("galLen : ", galLen)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, galLen)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+
+	fmt.Println("generate Evaluator end")
+	runtime.GOMAXPROCS(1)
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	value := make([]float64, n)
+	testing := func(ratio int) {
+
+		sparseN := n / ratio
+		fmt.Println(sparseN)
+		for i := range value {
+			if i%ratio == 0 {
+				value[i] = 0.001 * float64(i)
+			} else {
+				value[i] = 0
+			}
+		}
+
+		pt := hefloat.NewPlaintext(params, params.MaxLevel())
+		pt.IsBatched = false
+
+		encoder.Encode(value, pt)
+		ct, _ := encryptor.EncryptNew(pt)
+		ringQ := params.RingQ().AtLevel(ct.Level())
+
+		ringQ.INTT(ct.Value[0], ct.Value[0])
+		ringQ.INTT(ct.Value[1], ct.Value[1])
+
+		ninv := ringQ.NewRNSScalarFromUInt64(uint64(sparseN))
+		ringQ.MFormRNSScalar(ninv, ninv)
+		ringQ.Inverse(ninv)
+
+		idxarr := make([]uint64, sparseN)
+
+		for i := range idxarr {
+			idx, ch := ModInv(uint64(2*i+1), uint64(2*sparseN))
+			_ = ch
+			idxarr[i] = idx
+		}
+
+		for i := range value {
+			value[i] = 0
+		}
+		encoder.Encode(value, pt)
+		// ctzero, _ := encryptor.EncryptNew(pt)
+
+		cts := make([]*rlwe.Ciphertext, sparseN)
+		for i := range cts {
+			if ratio < 64 {
+				cts[i] = ct.CopyNew()
+			} else {
+				cts[i] = ct.CopyNew()
+			}
+
+		}
+
+		work := make([]*rlwe.Ciphertext, sparseN)
+		for i := range work {
+			if ratio < 64 {
+				work[i] = ct.CopyNew()
+			} else {
+				work[i] = ct.CopyNew()
+			}
+		}
+		aux := make([]*rlwe.Ciphertext, sparseN)
+		for i := range aux {
+			if ratio < 64 {
+				aux[i] = ct.CopyNew()
+			} else {
+				aux[i] = ct.CopyNew()
+			}
+		}
+
+		starttime := time.Now()
+		// for i := range cts {
+		// 	ringQ.MultByMonomial(cts[i].Value[0], i*ratio, cts[i].Value[0])
+		// 	ringQ.MultByMonomial(cts[i].Value[1], i*ratio, cts[i].Value[1])
+		// }
+		elapse := time.Since(starttime)
+		fmt.Println("mult mono : ", elapse)
+		total := elapse
+
+		starttime = time.Now()
+		Tweak4_nonrecur(cts, params, evaluator, ringQ, sparseN, work, 0, aux, 0)
+		elapse = time.Since(starttime)
+		fmt.Println("tweak1 : ", elapse)
+		total += elapse
+
+		// var except time.Duration
+		starttime = time.Now()
+		res := make([]*rlwe.Ciphertext, sparseN)
+		for i := range res {
+			st := time.Now()
+			res[i] = aux[(idxarr[i]-1)/2].CopyNew()
+
+			ringQ.MForm(res[i].Value[0], res[i].Value[0])
+			ringQ.MForm(res[i].Value[1], res[i].Value[1])
+
+			ringQ.MulRNSScalarMontgomery(res[i].Value[0], ninv, res[i].Value[0])
+			ringQ.MulRNSScalarMontgomery(res[i].Value[1], ninv, res[i].Value[1])
+
+			ringQ.IMForm(res[i].Value[0], res[i].Value[0])
+			ringQ.IMForm(res[i].Value[1], res[i].Value[1])
+
+			res[i].IsNTT = false
+
+			// exctime := time.Now()
+			// galEl := uint64((2*i + 1))
+			// kgen_ := rlwe.NewKeyGenerator(params)
+			// gk := kgen_.GenGaloisKeyNew(galEl, sk)
+			// _ = gk
+			// except += time.Since(exctime)
+			// Automorphism(evaluator, ringQ, res[i], galEl, gk, res[i])
+
+			// if i == 255 || i == 3 {
+			// 	el := time.Since(st)
+			// 	fmt.Println(el)
+			// 	st = time.Now()
+			// }
+			// galEl := uint64((2*i + 1))
+			// var gk *rlwe.GaloisKey
+			// if gk, err = evaluator.CheckAndGetGaloisKey(galEl); err != nil {
+			// 	fmt.Println("cannot apply Automorphism:", err)
+			// }
+			// Automorphism(evaluator, ringQ, res[i], galEl, gk, res[i])
+
+			res[i].IsNTT = true
+			if i == 255 || i == 3 {
+				el := time.Since(st)
+				fmt.Println(el)
+			}
+
+		}
+		// elapse = time.Since(starttime)
+		// elapse -= except
+		// fmt.Println("auto : ", elapse)
+		// // fmt.Println("except : ", except)
+		// total += elapse
+
+		// starttime = time.Now()
+		// Tweak4(res, params, evaluator, ringQ, sparseN, work, 0, aux, 0)
+		// res2 := aux
+		// elapse = time.Since(starttime)
+		// fmt.Println("tweak2 : ", elapse)
+		// total += elapse
+
+		// result := make([]*rlwe.Ciphertext, sparseN)
+		// starttime = time.Now()
+		// for idx := range sparseN {
+		// 	// idx := i / ratio
+		// 	i := idx * ratio
+
+		// 	ringQ.MultByMonomial(res2[idx].Value[0], i, res2[idx].Value[0])
+		// 	ringQ.MultByMonomial(res2[idx].Value[1], i, res2[idx].Value[1])
+		// 	if i != 0 {
+		// 		ringQ.Neg(res2[idx].Value[0], res2[idx].Value[0])
+		// 		ringQ.Neg(res2[idx].Value[1], res2[idx].Value[1])
+		// 	}
+		// 	result[(sparseN-idx)%(sparseN)] = res2[idx]
+		// }
+		// elapse = time.Since(starttime)
+		// fmt.Println("mult mono : ", elapse)
+		// total += elapse
+		// fmt.Println("total time : ", total)
+
+		// reval := make([][]float64, sparseN)
+		// for i := range reval {
+		// 	reval[i] = make([]float64, n)
+		// 	ringQ.NTT(result[i].Value[0], result[i].Value[0])
+		// 	ringQ.NTT(result[i].Value[1], result[i].Value[1])
+
+		// 	dept := decryptor.DecryptNew(result[i])
+		// 	err := encoder.Decode(dept, reval[i])
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 	}
+		// }
+
+		// for i := range n {
+		// 	fmt.Println(reval[i])
+		// }
+
+		// fmt.Println("check all")
+		// for i := range sparseN {
+		// 	for j := range n {
+		// 		if (j % ratio) != 0 {
+		// 			if int(math.Round(reval[i][j]*1000)) != 0 {
+		// 				fmt.Println("err! : ", i, j, reval[i][j])
+		// 			}
+		// 		} else if int(math.Round(reval[i][j]*1000)) != i*ratio {
+		// 			fmt.Println("err : ", i, j, reval[i][j])
+		// 		}
+		// 	}
+		// }
+	}
+	// testing(256)
+
+	ratio := 8
 	for range 1 {
 		ratio >>= 1
 		testing(ratio)

@@ -1,44 +1,30 @@
 package matmult
 
 import (
-	"fmt"
 	"math"
+	"math/bits"
 	"math/cmplx"
+	"runtime"
+	"sync"
 
 	cwrappingflint "github.com/lifejade/mm/src/matmult/cwrapping_flint"
 	"github.com/lifejade/mm/src/transpose"
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
 	"github.com/tuneinsight/lattigo/v5/schemes/ckks"
 )
 
-func CtZero(params hefloat.Parameters, encoder *hefloat.Encoder, encryptor *rlwe.Encryptor) *rlwe.Ciphertext {
-	value := make([]float64, params.MaxSlots())
-	pt := rlwe.NewPlaintext(params, params.MaxLevel())
-	encoder.Encode(value, pt)
-	ct, _ := encryptor.EncryptNew(pt)
-	return ct
-}
-
-func bitReverse(i, m int) int {
-	rev := 0
-	for j := 0; j < m; j++ {
-		rev = (rev << 1) | (i & 1)
-		i >>= 1
-	}
-	return rev
-}
-
 func BitReversePermutationMatrix(n int) [][]complex128 {
-	m := int(math.Log2(float64(n)))
+	m := bits.Len64(uint64(n)) - 1
 	P := make([][]complex128, n)
 	for i := range P {
 		P[i] = make([]complex128, n)
 	}
 
 	for i := 0; i < n; i++ {
-		rev := bitReverse(i, m)
+		rev := util.BitReverse(i, m)
 		P[i][rev] = 1.0
 	}
 	return P
@@ -301,7 +287,6 @@ func S2C_OnceMul(cts1, cts2 []*rlwe.Ciphertext, params hefloat.Parameters, evalu
 
 	return
 }
-
 func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_CL [][][]complex128) {
 	logn := params.LogMaxSlots()
 	n := 1 << logn
@@ -312,10 +297,215 @@ func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_C
 		roots_complex[i] = roots[i].Complex128()
 	}
 
+	div := complex(math.Pow(float64(n), 1/float64(logn)), 0)
+	div = complex(1, 0)
+	// --- SF_CL 생성 ---
+	SF_CL = make([][][]complex128, len(SF_arr))
+	idx := 0
+	for i := range SF_CL {
+		// 원래 코드: for j := range SF_arr[i] { ... idx++ }
+		// SF_arr[i]는 반복 횟수(또는 0이 아닌 요소의 개수)를 의미함
+		count := SF_arr[i]
+		SF_CL[i] = computeCombinedMat(n, idx, count, roots_complex, div, false)
+		idx += count
+	}
+
+	// --- SFI_CL 생성 ---
+	SFI_CL = make([][][]complex128, len(SFI_arr))
+	idx = 0
+	for i := range SFI_CL {
+		count := SFI_arr[i]
+		SFI_CL[i] = computeCombinedMat(n, idx, count, roots_complex, div, true)
+		idx += count
+	}
+
+	return
+}
+
+func GenSFMat_CL2(params hefloat.Parameters, n int, SF_arr, SFI_arr []int) (SF_CL, SFI_CL [][][]complex128) {
+
+	roots := ckks.GetRootsBigComplex(n<<2, params.EncodingPrecision())
+	roots_complex := make([]complex128, 4*n)
+
+	for i := range roots_complex {
+		roots_complex[i] = roots[i].Complex128()
+	}
+
+	div := complex(1, 0)
+	// --- SF_CL 생성 ---
+	if SF_arr != nil {
+		SF_CL = make([][][]complex128, len(SF_arr))
+		idx := 0
+		for i := range SF_CL {
+			// 원래 코드: for j := range SF_arr[i] { ... idx++ }
+			// SF_arr[i]는 반복 횟수(또는 0이 아닌 요소의 개수)를 의미함
+			count := SF_arr[i]
+			SF_CL[i] = computeCombinedMat(n, idx, count, roots_complex, div, false)
+			idx += count
+		}
+
+	}
+
+	// --- SFI_CL 생성 ---
+	if SFI_arr != nil {
+		SFI_CL = make([][][]complex128, len(SFI_arr))
+		idx := 0
+		for i := range SFI_CL {
+			count := SFI_arr[i]
+			SFI_CL[i] = computeCombinedMat(n, idx, count, roots_complex, div, true)
+			idx += count
+		}
+	}
+
+	return
+}
+func GenSFMat_CL3(params hefloat.Parameters, n int, SF_arr, SFI_arr []int) (SF_CL, SFI_CL [][]complex128) {
+
+	roots := ckks.GetRootsBigComplex(n<<2, params.EncodingPrecision())
+	roots_complex := make([]complex128, 4*n)
+
+	for i := range roots_complex {
+		roots_complex[i] = roots[i].Complex128()
+	}
+
+	div := complex(1, 0)
+	// --- SF_CL 생성 ---
+	if SF_arr != nil {
+		SF_CL = make([][]complex128, len(SF_arr))
+		idx := 0
+		for i := range SF_CL {
+			// 원래 코드: for j := range SF_arr[i] { ... idx++ }
+			// SF_arr[i]는 반복 횟수(또는 0이 아닌 요소의 개수)를 의미함
+			count := SF_arr[i]
+			mat := cwrappingflint.ComputeCombinedMat(n, idx, count, roots_complex, div, false)
+			SF_CL[i] = mat
+			idx += count
+		}
+
+	}
+
+	// --- SFI_CL 생성 ---
+	if SFI_arr != nil {
+		SFI_CL = make([][]complex128, len(SFI_arr))
+		idx := 0
+		for i := range SFI_CL {
+			count := SFI_arr[i]
+			mat := cwrappingflint.ComputeCombinedMat(n, idx, count, roots_complex, div, true)
+			SFI_CL[i] = mat
+			idx += count
+		}
+	}
+
+	return
+}
+
+// 행렬 곱셈 결과를 효율적으로 계산하는 헬퍼 함수
+func computeCombinedMat(n, startIdx, count int, roots []complex128, div complex128, isInverse bool) [][]complex128 {
+	mat := make([][]complex128, n)
+	for i := range mat {
+		mat[i] = make([]complex128, n)
+	}
+
+	numCPUs := runtime.NumCPU()
+	var wg sync.WaitGroup
+	colChan := make(chan int, n)
+
+	for w := 0; w < numCPUs; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range colChan {
+				col := make([]complex128, n)
+				col[j] = 1 // 단위 벡터
+
+				currIdx := startIdx
+				for l := 0; l < count; l++ {
+					if isInverse {
+						col = applySFIStep(currIdx, n, roots, div, col)
+					} else {
+						col = applySFStep(currIdx, n, roots, col)
+					}
+					currIdx++
+				}
+
+				for i := 0; i < n; i++ {
+					mat[i][j] = col[i]
+				}
+			}
+		}()
+	}
+
+	for j := 0; j < n; j++ {
+		colChan <- j
+	}
+	close(colChan)
+	wg.Wait()
+	return mat
+}
+
+// Butterfly 연산 (Sparse Matrix 연산 최적화)
+func applySFStep(idx, n int, roots []complex128, v []complex128) []complex128 {
+	res := make([]complex128, n)
+	m := 1 << (idx + 1)
+	halfM, gap := m>>1, n/m
+	for i := 0; i < n; i += m {
+		pow5v := 1
+		for j := 0; j < halfM; j++ {
+			k := pow5v * gap
+			u, w := v[i+j], v[i+j+halfM]*roots[k]
+			res[i+j], res[i+j+halfM] = u+w, u-w
+			pow5v = (pow5v * 5) & ((m << 2) - 1)
+		}
+	}
+	return res
+}
+
+func applySFIStep(idx, n int, roots []complex128, div complex128, v []complex128) []complex128 {
+	res := make([]complex128, n)
+	m := n >> idx
+	halfM, gap := m>>1, n/m
+
+	for i := 0; i < n; i += m {
+		pow5v := 1
+		for j := 0; j < halfM; j++ {
+			k := pow5v * gap
+			wInv := cmplx.Conj(roots[k])
+
+			a := v[i+j]
+			b := v[i+j+halfM]
+
+			// Matches:
+			// [1/div, 1/div; conj(root)/div, -conj(root)/div] * [a;b]
+			res[i+j] = (a + b) / div
+			res[i+j+halfM] = (wInv * (a - b)) / div
+
+			pow5v = (pow5v * 5) & ((m << 2) - 1)
+		}
+	}
+	return res
+}
+
+func GenSFMat_CL_Slow(
+	params hefloat.Parameters,
+	SF_arr, SFI_arr []int,
+) (SF_CL, SFI_CL [][][]complex128) {
+
+	logn := params.LogMaxSlots()
+	n := 1 << logn
+
+	roots := ckks.GetRootsBigComplex(n<<2, params.EncodingPrecision())
+	roots_complex := make([]complex128, 4*n)
+	for i := range roots_complex {
+		roots_complex[i] = roots[i].Complex128()
+	}
+
+	// --------------------
+	// Forward SF
+	// --------------------
 	SF_ := make([][][]complex128, logn)
 	for idx := 0; idx < logn; idx++ {
 		SF_[idx] = make([][]complex128, n)
-		for i := range n {
+		for i := 0; i < n; i++ {
 			SF_[idx][i] = make([]complex128, n)
 		}
 
@@ -332,21 +522,25 @@ func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_C
 				SF_[idx][i+j+(m>>1)][i+j+(m>>1)] = -roots_complex[k]
 
 				pow5v *= 5
-				pow5v = pow5v & ((m << 2) - 1)
+				pow5v &= ((m << 2) - 1)
 			}
 		}
 	}
 
+	// --------------------
+	// Inverse SF
+	// --------------------
 	SFI_ := make([][][]complex128, logn)
 	div := complex(math.Pow(float64(n), 1/float64(logn)), 0)
-	//div := complex(1, 0)
+	// div := complex(1, 0)
+
 	for idx := 0; idx < logn; idx++ {
 		SFI_[idx] = make([][]complex128, n)
-		for i := range n {
+		for i := 0; i < n; i++ {
 			SFI_[idx][i] = make([]complex128, n)
 		}
 
-		m := n >> (idx)
+		m := n >> idx
 		for i := 0; i < n; i += m {
 			pow5v := 1
 			for j := 0; j < (m >> 1); j++ {
@@ -355,15 +549,20 @@ func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_C
 				SFI_[idx][i+j][i+j] = 1 / div
 				SFI_[idx][i+j][i+j+(m>>1)] = 1 / div
 
-				SFI_[idx][i+j+(m>>1)][i+j] = cmplx.Conj(roots_complex[k] / div)
-				SFI_[idx][i+j+(m>>1)][i+j+(m>>1)] = -cmplx.Conj(roots_complex[k] / div)
+				SFI_[idx][i+j+(m>>1)][i+j] =
+					cmplx.Conj(roots_complex[k] / div)
+				SFI_[idx][i+j+(m>>1)][i+j+(m>>1)] =
+					-cmplx.Conj(roots_complex[k] / div)
 
 				pow5v *= 5
-				pow5v = pow5v & ((m << 2) - 1)
+				pow5v &= ((m << 2) - 1)
 			}
 		}
 	}
 
+	// --------------------
+	// Compose forward
+	// --------------------
 	l := len(SF_arr)
 	SF_CL = make([][][]complex128, l)
 	idx := 0
@@ -379,6 +578,9 @@ func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_C
 		}
 	}
 
+	// --------------------
+	// Compose inverse
+	// --------------------
 	l = len(SFI_arr)
 	SFI_CL = make([][][]complex128, l)
 	idx = 0
@@ -393,6 +595,7 @@ func GenSFMat_CL(params hefloat.Parameters, SF_arr, SFI_arr []int) (SF_CL, SFI_C
 			idx++
 		}
 	}
+
 	return
 }
 
@@ -437,8 +640,6 @@ func mul(a, b [][]complex128) [][]complex128 {
 
 func PPMM_Flint(cts []*rlwe.Ciphertext, u [][]uint64, params hefloat.Parameters, n int) []*rlwe.Ciphertext {
 	level := cts[0].Level() + 1
-
-	fmt.Println(level)
 
 	a := make([][][]uint64, level)
 	b := make([][][]uint64, level)
@@ -651,6 +852,84 @@ func PPMM_Blas_CRT_Inplace(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, level,
 
 }
 
+func PPMM_Blas_CRT_Stride(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint, stride, level, degree int, ringP *ring.Ring, res [][]ring.Poly, buffer1, buffer2 []float64) {
+	P := ringP.ModuliChain()
+	_ = P
+	level = level + 1
+	for d := range degree {
+		index := 0
+		for i := range level {
+			for j := range n_b {
+				idx := stpoint + j*stride
+				coeff := cts[d][idx].Coeffs[i]
+				for k := range n_c {
+					buffer1[index] = float64(coeff[k])
+					index++
+				}
+			}
+		}
+		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+
+		index = 0
+		for i := range level {
+			p := int64(P[i])
+			for j := range n_b {
+				idx := stpoint + j*stride
+				coeff := res[d][idx].Coeffs[i]
+				for k := range n_c {
+					val := int64(buffer2[index]) % p
+					if val < 0 {
+						coeff[k] = uint64(val + p)
+					} else {
+						coeff[k] = uint64(val)
+					}
+					index++
+
+				}
+			}
+		}
+	}
+}
+
+func PPMM_Blas_CRT_Stride2(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride, level, degree int, ringP *ring.Ring, res [][]ring.Poly, buffer1, buffer2 []float64) {
+	P := ringP.ModuliChain()
+	_ = P
+	level = level + 1
+	for d := range degree {
+		index := 0
+		for i := range level {
+			for j := range n_b {
+				idx := stpoint + j*stride
+				coeff := cts[d][idx].Coeffs[i]
+				for k := range n_c {
+					buffer1[index] = float64(coeff[k])
+					index++
+				}
+			}
+		}
+		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+
+		index = 0
+		for i := range level {
+			p := int64(P[i])
+			for j := range n_b {
+				idx := endpoint + j*stride
+				coeff := res[d][idx].Coeffs[i]
+				for k := range n_c {
+					val := int64(buffer2[index]) % p
+					if val < 0 {
+						coeff[k] = uint64(val + p)
+					} else {
+						coeff[k] = uint64(val)
+					}
+					index++
+
+				}
+			}
+		}
+	}
+}
+
 func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n_a, n_b, n_c, level int, bred []uint64, ringP *ring.Ring, result []ring.Poly) {
 	a := make([][][]uint64, level)
 	for j := range level {
@@ -672,6 +951,40 @@ func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Paramet
 	for i := range n_a {
 		for j := range level {
 			result[i].Coeffs[j] = CA[j][i]
+		}
+	}
+}
+
+func AddManyRing(r *ring.Ring, p1, p2, p3 [][]ring.Poly) {
+	for i := range p2 {
+		for j := range p2[i] {
+			r.Add(p1[i][j], p2[i][j], p3[i][j])
+		}
+	}
+}
+
+func SubManyRing(r *ring.Ring, p1, p2, p3 [][]ring.Poly) {
+	for i := range p2 {
+		for j := range p2[i] {
+			r.Sub(p1[i][j], p2[i][j], p3[i][j])
+		}
+	}
+}
+
+func AddManyRingIdx(r *ring.Ring, p1, p2, p3 [][]ring.Poly, stpIdx int) {
+	l := len(p3[0])
+	for d := range p3 {
+		for j := stpIdx; j < l; j++ {
+			r.Add(p1[d][j], p2[d][j-stpIdx], p3[d][j])
+		}
+	}
+}
+
+func SubManyRingIdx(r *ring.Ring, p1, p2, p3 [][]ring.Poly, stpIdx int) {
+	l := len(p3[0])
+	for d := range p3 {
+		for j := stpIdx; j < l; j++ {
+			r.Sub(p1[d][j], p2[d][j-stpIdx], p3[d][j])
 		}
 	}
 }

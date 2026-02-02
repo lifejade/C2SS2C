@@ -8,7 +8,7 @@ ts=$(date '+%y%m%d%H%M')
 session="${ts}_${TEST_NAME}"
 log="${SIMUL_LOG_PATH}/${ts}_${TEST_NAME}.txt"
 
-cmd="cd \"$DIR_PATH\" && go test -run ^Test_${TEST_NAME}\$ -timeout 24h > \"$log\""
+cmd="cd \"$DIR_PATH\" && go test -run ^Test_${TEST_NAME}\$ -timeout 100000h > \"$log\""
 
 echo "세션 이름: $session"
 echo "로그 파일: $log"

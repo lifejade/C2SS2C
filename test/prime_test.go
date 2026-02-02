@@ -74,7 +74,7 @@ func genPrime(bits int) (*big.Int, error) {
 	return rand.Prime(rand.Reader, bits)
 }
 func Test_PrimeNonNTT(t *testing.T) {
-	k := 40
+	k := 100
 	bits := 22
 	seen := make(map[string]struct{}, k)
 	out := make([]*big.Int, 0, k)
@@ -94,6 +94,9 @@ func Test_PrimeNonNTT(t *testing.T) {
 	for i := range out {
 		fmt.Print(out[i], ",")
 	}
+	fmt.Println()
+	fmt.Println("num of primes = ", k)
+	fmt.Println("bit len = ", bits)
 }
 
 func Test_Prime(t *testing.T) {
@@ -129,4 +132,44 @@ func Test_Prime2(t *testing.T) {
 	// 26-bit 소수 2개 뽑기
 	Q := FindNTTPrime2(logQ, modulus, 0, 6)
 	fmt.Println(Q)
+}
+
+func FindNTTPrime3(bitLen int, modulus uint64, trials, count int) []uint64 {
+	result := make([]uint64, 0)
+	// k := (sampling.RandUint64() & ((1 << bitLen) - 1))
+	k := uint64(1)
+	var cand uint64
+	bigcand := new(big.Int)
+	for i, idx := 0, 0; trials <= 0 || i < trials; i++ {
+		cand = k*modulus + 1
+
+		bigcand.SetInt64(int64(cand))
+		if bigcand.BitLen() > bitLen {
+			break
+		}
+		check := bigcand.ProbablyPrime(0)
+		if check {
+			result = append(result, cand)
+			if idx >= count {
+				break
+			}
+		}
+		k++
+	}
+	return result
+}
+
+func Test_Prime3(t *testing.T) {
+	const (
+		logQ  = 24 //
+		logN  = 16 //
+		count = 50
+	)
+	nthRootLog := logN
+	modulus := uint64(1) << (nthRootLog + 1) // 2*NthRoot = 2^(15+1)
+	fmt.Println(modulus)
+	// 26-bit 소수 2개 뽑기
+	Q := FindNTTPrime3(logQ, modulus, 0, 50)
+	fmt.Println(Q)
+	fmt.Println(len(Q))
 }

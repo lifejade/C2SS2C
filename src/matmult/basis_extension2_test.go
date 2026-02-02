@@ -379,6 +379,7 @@ func Test_BasisTime(t *testing.T) {
 	encoder := hefloat.NewEncoder(params)
 	evaluator := hefloat.NewEvaluator(params, evk)
 	fmt.Println("generate Evaluator end")
+	level := 5
 
 	_, _, _, _ = encoder, encryptor, decryptor, evaluator
 
@@ -388,37 +389,37 @@ func Test_BasisTime(t *testing.T) {
 	fmt.Println(len(P))
 	ringQ, _ := ring.NewRing(params.N(), Q)
 	ringP, _ := ring.NewRing(params.N(), P)
-	be := NewBasisExtender(ringQ, ringP, []Key{{params.MaxLevel(), 35}}, []Key{{35, params.MaxLevel()}})
+	be := NewBasisExtender(ringQ, ringP, []Key{{level, 20}}, []Key{{20, level}})
 
 	value := make([]float64, n)
 	for i, _ := range value {
 		value[i] = sampling.RandFloat64(-1, 1)
 	}
 
-	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt := hefloat.NewPlaintext(params, level)
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
 
-	ringQ.AtLevel(params.MaxLevel()).INTT(ct.Value[0], ct.Value[0])
-	ringQ.AtLevel(params.MaxLevel()).INTT(ct.Value[1], ct.Value[1])
+	ringQ.AtLevel(level).INTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(level).INTT(ct.Value[1], ct.Value[1])
 
 	p0 := ringP.NewPoly()
 	p1 := ringP.NewPoly()
 
 	starttime := time.Now()
-	be.ModSwitchQtoP(params.MaxLevel(), 35, ct.Value[0], p0)
-	be.ModSwitchQtoP(params.MaxLevel(), 35, ct.Value[1], p1)
+	be.ModSwitchQtoP(level, 20, ct.Value[0], p0)
+	be.ModSwitchQtoP(level, 20, ct.Value[1], p1)
 	elapse := time.Since(starttime)
 	fmt.Println("Q to P time: ", elapse)
 
 	starttime = time.Now()
-	be.ModSwitchPtoQ(35, params.MaxLevel(), p0, ct.Value[0])
-	be.ModSwitchPtoQ(35, params.MaxLevel(), p1, ct.Value[1])
+	be.ModSwitchPtoQ(20, level, p0, ct.Value[0])
+	be.ModSwitchPtoQ(20, level, p1, ct.Value[1])
 	elapse = time.Since(starttime)
 	fmt.Println("P to Q time: ", elapse)
 
-	ringQ.AtLevel(params.MaxLevel()).NTT(ct.Value[0], ct.Value[0])
-	ringQ.AtLevel(params.MaxLevel()).NTT(ct.Value[1], ct.Value[1])
+	ringQ.AtLevel(level).NTT(ct.Value[0], ct.Value[0])
+	ringQ.AtLevel(level).NTT(ct.Value[1], ct.Value[1])
 
 	values := make([]float64, n)
 	dept := decryptor.DecryptNew(ct)

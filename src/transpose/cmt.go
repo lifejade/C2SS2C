@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
@@ -250,6 +251,169 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 	return result
 }
 
+func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, N, sparseN int, work, aux, res []*rlwe.Ciphertext) {
+
+	ninv := ringQ.NewRNSScalarFromUInt64(uint64(sparseN))
+	ringQ.MFormRNSScalar(ninv, ninv)
+	ringQ.Inverse(ninv)
+	ratio := N / sparseN
+	idxarr := make([]uint64, sparseN)
+
+	for i := range idxarr {
+		idx, ch := ModInv(uint64(2*i+1), uint64(2*sparseN))
+		_ = ch
+		idxarr[i] = idx
+	}
+
+	for i := range inputs {
+		ringQ.MultByMonomial(inputs[i].Value[0], i*ratio, inputs[i].Value[0])
+		ringQ.MultByMonomial(inputs[i].Value[1], i*ratio, inputs[i].Value[1])
+	}
+
+	Tweak4(inputs, params, eval, ringQ, sparseN, work, 0, aux, 0)
+	// var err error
+	for i := range res {
+		res[i] = aux[(idxarr[i]-1)/2].CopyNew()
+
+		ringQ.MForm(res[i].Value[0], res[i].Value[0])
+		ringQ.MForm(res[i].Value[1], res[i].Value[1])
+
+		ringQ.MulRNSScalarMontgomery(res[i].Value[0], ninv, res[i].Value[0])
+		ringQ.MulRNSScalarMontgomery(res[i].Value[1], ninv, res[i].Value[1])
+
+		ringQ.IMForm(res[i].Value[0], res[i].Value[0])
+		ringQ.IMForm(res[i].Value[1], res[i].Value[1])
+
+		res[i].IsNTT = false
+		// ringQ.NTT(res[i].Value[0], res[i].Value[0])
+		// ringQ.NTT(res[i].Value[1], res[i].Value[1])
+
+		galEl := uint64((2*i + 1))
+		// var gk *rlwe.GaloisKey
+		// if gk, err = eval.CheckAndGetGaloisKey(galEl); err != nil {
+		// 	panic(err)
+		// }
+		eval.Automorphism(res[i], galEl, res[i])
+
+		// ringQ.INTT(res[i].Value[0], res[i].Value[0])
+		// ringQ.INTT(res[i].Value[1], res[i].Value[1])
+		res[i].IsNTT = true
+
+	}
+	Tweak4(res, params, eval, ringQ, sparseN, work, 0, aux, 0)
+
+	for idx := range sparseN {
+		// idx := i / ratio
+		i := idx * ratio
+
+		ringQ.MultByMonomial(aux[idx].Value[0], i, aux[idx].Value[0])
+		ringQ.MultByMonomial(aux[idx].Value[1], i, aux[idx].Value[1])
+		if i != 0 {
+			ringQ.Neg(aux[idx].Value[0], aux[idx].Value[0])
+			ringQ.Neg(aux[idx].Value[1], aux[idx].Value[1])
+		}
+		res[(sparseN-idx)%(sparseN)] = aux[idx].CopyNew()
+	}
+
+}
+
+func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, N, sparseN int, work, aux, res []*rlwe.Ciphertext) {
+	// if inputs[0].Level() != work[0].Level() {
+	// 	for i := range work {
+	// 		work[i].Resize(1, inputs[0].Level())
+	// 	}
+	// }
+	// if inputs[0].Level() != aux[0].Level() {
+	// 	for i := range aux {
+	// 		aux[i].Resize(1, inputs[0].Level())
+	// 	}
+	// }
+
+	ratio := N / sparseN
+	idxarr := make([]uint64, sparseN)
+
+	for i := range idxarr {
+		idx, ch := ModInv(uint64(2*i+1), uint64(2*sparseN))
+		_ = ch
+		idxarr[i] = idx
+	}
+
+	for i := range inputs {
+		ringQ.MultByMonomial(inputs[i].Value[0], i*ratio, inputs[i].Value[0])
+		ringQ.MultByMonomial(inputs[i].Value[1], i*ratio, inputs[i].Value[1])
+	}
+
+	Tweak4(inputs, params, eval, ringQ, sparseN, work, 0, aux, 0)
+	var err error
+	for i := range res {
+		res[i] = aux[(idxarr[i]-1)/2].CopyNew()
+		galEl := uint64((2*i + 1))
+		var gk *rlwe.GaloisKey
+		if gk, err = eval.CheckAndGetGaloisKey(galEl); err != nil {
+			if util.SContext.Sk == nil && !util.Debug.IsDebug {
+				panic(err)
+			}
+			elapse := time.Since(util.Debug.StartTime)
+			util.Debug.AccTime += elapse
+			galEl := uint64((2*i + 1))
+			kgen_ := rlwe.NewKeyGenerator(params)
+			// gk := kgen_.GenGaloisKeyNew(galEl, sk)
+			gk = kgen_.GenGaloisKeyNew(galEl, util.SContext.Sk)
+			util.Debug.StartTime = time.Now()
+		}
+		res[i].IsNTT = false
+		Automorphism(eval, ringQ.AtLevel(inputs[i].Level()), res[i], galEl, gk, res[i])
+		res[i].IsNTT = true
+	}
+	Tweak4(res, params, eval, ringQ, sparseN, work, 0, aux, 0)
+
+	for idx := range sparseN {
+		// idx := i / ratio
+		i := idx * ratio
+
+		ringQ.MultByMonomial(aux[idx].Value[0], i, aux[idx].Value[0])
+		ringQ.MultByMonomial(aux[idx].Value[1], i, aux[idx].Value[1])
+		if i != 0 {
+			ringQ.Neg(aux[idx].Value[0], aux[idx].Value[0])
+			ringQ.Neg(aux[idx].Value[1], aux[idx].Value[1])
+		}
+		res[(sparseN-idx)%(sparseN)] = aux[idx].CopyNew()
+	}
+
+}
+
+func Automorphism(eval *hefloat.Evaluator, ringQ *ring.Ring, ctIn *rlwe.Ciphertext, galEl uint64, evk *rlwe.GaloisKey, opOut *rlwe.Ciphertext) {
+
+	if galEl == 1 {
+		if opOut != ctIn {
+			opOut.Copy(ctIn)
+		}
+		return
+	}
+
+	ctTmp := &rlwe.Ciphertext{Element: rlwe.Element[ring.Poly]{Value: []ring.Poly{eval.BuffQP[0].Q, eval.BuffQP[1].Q}}}
+	ctTmp.MetaData = ctIn.MetaData
+
+	// eval.GadgetProduct(level, ctIn.Value[1], &evk.GadgetCiphertext, ctTmp)
+
+	// ringQ.Add(ctTmp.Value[0], ctIn.Value[0], ctTmp.Value[0])
+
+	KeySwitching(eval, ringQ, ctIn, &evk.EvaluationKey, ctTmp)
+
+	ringQ.Automorphism(ctTmp.Value[0], galEl, opOut.Value[0])
+	ringQ.Automorphism(ctTmp.Value[1], galEl, opOut.Value[1])
+
+	*opOut.MetaData = *ctIn.MetaData
+}
+
+func KeySwitching(eval *hefloat.Evaluator, ringQ *ring.Ring, ctIn *rlwe.Ciphertext, evk *rlwe.EvaluationKey, opOut *rlwe.Ciphertext) {
+	level := ctIn.Level()
+
+	eval.GadgetProduct(level, ctIn.Value[1], &evk.GadgetCiphertext, opOut)
+
+	ringQ.Add(opOut.Value[0], ctIn.Value[0], opOut.Value[0])
+}
+
 // for test
 func Tweak3(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int) []*rlwe.Ciphertext {
 	if n == 1 {
@@ -298,7 +462,7 @@ func Tweak3(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 	return out
 }
 
-
+// Original recursive Tweak4 (restored). Writes output into out[outOff:outOff+n]
 func Tweak4(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int, work []*rlwe.Ciphertext, workOff int, out []*rlwe.Ciphertext, outOff int) {
 	out[outOff] = cts[0]
 	if n == 1 {
@@ -341,6 +505,147 @@ func Tweak4(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 	}
 }
 
+// Tweak4_nonrecur: iterative, non-recursive version using explicit stack.
+func Tweak4_nonrecur(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, n int, work []*rlwe.Ciphertext, workOff int, out []*rlwe.Ciphertext, outOff int) {
+	type frame struct {
+		cts     []*rlwe.Ciphertext
+		n       int
+		workOff int
+		outOff  int
+		l       int
+		logn    int
+		maxPowl int
+		started bool
+		waiting bool
+		childP  int
+	}
+
+	stack := make([]frame, 0, 32)
+	stack = append(stack, frame{cts: cts, n: n, workOff: workOff, outOff: outOff})
+	temp := ringQ.NewPoly()
+
+	for len(stack) > 0 {
+		fi := &stack[len(stack)-1]
+
+		if !fi.started {
+			out[fi.outOff] = fi.cts[0]
+			fi.started = true
+			if fi.n == 1 {
+				stack = stack[:len(stack)-1]
+				continue
+			}
+			fi.logn = bits.Len(uint(fi.n)) - 1
+			fi.maxPowl = fi.n / 2
+			fi.l = 0
+			fi.waiting = false
+		}
+
+		if fi.waiting {
+			powl := fi.childP
+			res := out[fi.outOff : fi.outOff+fi.n]
+			step := (params.MaxSlots() * 2) / powl
+
+			for j := 0; j < powl; j++ {
+				work[len(work)-1].Copy(res[powl+j])
+				tmp := work[len(work)-1]
+
+				shift := step * j
+				MultByMonomial(ringQ, tmp.Value[0], shift, tmp.Value[0], temp)
+				MultByMonomial(ringQ, tmp.Value[1], shift, tmp.Value[1], temp)
+
+				if err := eval.Sub(res[j], tmp, res[j+powl]); err != nil {
+					panic(fmt.Errorf("Sub failed: %w", err))
+				}
+
+				if err := eval.Add(res[j], tmp, res[j]); err != nil {
+					panic(fmt.Errorf("Add failed: %w", err))
+				}
+			}
+
+			fi.waiting = false
+			fi.l++
+			continue
+		}
+
+		if fi.l >= fi.logn {
+			stack = stack[:len(stack)-1]
+			continue
+		}
+
+		powl := 1 << fi.l
+		den := powl * 2
+		temp := work[fi.workOff : fi.workOff+fi.maxPowl][:powl]
+		for j := 0; j < powl; j++ {
+			idx := ((2*j + 1) * fi.n) / den
+			temp[j] = fi.cts[idx]
+		}
+
+		fi.waiting = true
+		fi.childP = powl
+
+		child := frame{cts: temp, n: powl, workOff: fi.workOff + powl, outOff: fi.outOff + powl}
+		stack = append(stack, child)
+	}
+}
+
+// MultByMonomial evaluates p2 = p1 * X^k coefficient-wise in the ring.
+func MultByMonomial(r *ring.Ring, p1 ring.Poly, k int, p2 ring.Poly, tmpx ring.Poly) {
+
+	N := r.N()
+
+	shift := (k + (N << 1)) % (N << 1)
+	level := r.Level()
+
+	if shift == 0 {
+
+		for i := range r.SubRings[:level+1] {
+			p1tmp, p2tmp := p1.Coeffs[i], p2.Coeffs[i]
+			for j := 0; j < N; j++ {
+				p2tmp[j] = p1tmp[j]
+			}
+		}
+
+	} else {
+
+		if shift < N {
+
+			for i := range r.SubRings[:level+1] {
+				p1tmp, tmpxT := p1.Coeffs[i], tmpx.Coeffs[i]
+				for j := 0; j < N; j++ {
+					tmpxT[j] = p1tmp[j]
+				}
+			}
+
+		} else {
+
+			for i, s := range r.SubRings[:level+1] {
+				qi := s.Modulus
+				p1tmp, tmpxT := p1.Coeffs[i], tmpx.Coeffs[i]
+				for j := 0; j < N; j++ {
+					tmpxT[j] = qi - p1tmp[j]
+				}
+			}
+		}
+
+		shift %= N
+
+		for i, s := range r.SubRings[:level+1] {
+			qi := s.Modulus
+			p2tmp, tmpxT := p2.Coeffs[i], tmpx.Coeffs[i]
+			for j := 0; j < shift; j++ {
+				p2tmp[j] = qi - tmpxT[N-shift+j]
+			}
+		}
+
+		for i := range r.SubRings[:level+1] {
+			p2tmp, tmpxT := p2.Coeffs[i], tmpx.Coeffs[i]
+			for j := shift; j < N; j++ {
+				p2tmp[j] = tmpxT[j-shift]
+
+			}
+		}
+	}
+}
 
 // TODO
 func TransposeInplace(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, encoder *hefloat.Encoder, n int) {

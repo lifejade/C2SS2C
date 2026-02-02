@@ -1,7 +1,6 @@
 package matmult
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"math/bits"
@@ -28,28 +27,46 @@ type Key struct {
 
 // NewBasisExtender creates a new BasisExtender, enabling RNS basis extension from Q to P and P to Q.
 func NewBasisExtender(ringQ, ringP *ring.Ring, QtoP, PtoQ []Key) (be *BasisExtender) {
-
 	be = new(BasisExtender)
 
 	be.ringQ = ringQ
 	be.ringP = ringP
-
-	Q := ringQ.ModuliChain()
-	P := ringP.ModuliChain()
-
+	Q := be.ringQ.ModuliChain()
+	P := be.ringP.ModuliChain()
 	be.dicConstantsQtoP = make(map[Key]ModUpConstants)
-	for _, key := range QtoP {
-		be.dicConstantsQtoP[key] = GenModUpConstants(Q[:key.From+1], P[:key.To+1])
-	}
 	be.dicConstantsPtoQ = make(map[Key]ModUpConstants)
-	for _, key := range PtoQ {
-		be.dicConstantsPtoQ[key] = GenModUpConstants(P[:key.From+1], Q[:key.To+1])
+
+	if QtoP != nil {
+		for _, key := range QtoP {
+			be.dicConstantsQtoP[key] =
+				GenModUpConstants(Q[:key.From+1], P[:key.To+1])
+		}
+	}
+
+	if PtoQ != nil {
+		for _, key := range PtoQ {
+			be.dicConstantsPtoQ[key] =
+				GenModUpConstants(P[:key.From+1], Q[:key.To+1])
+		}
 	}
 
 	be.buffQ = ringQ.NewPoly()
 	be.buffP = ringP.NewPoly()
 
 	return
+}
+
+func (be *BasisExtender) AddSwitchDic(QtoP, PtoQ []Key) {
+	Q := be.ringQ.ModuliChain()
+	P := be.ringP.ModuliChain()
+
+	for _, key := range QtoP {
+		be.dicConstantsQtoP[key] = GenModUpConstants(Q[:key.From+1], P[:key.To+1])
+	}
+
+	for _, key := range PtoQ {
+		be.dicConstantsPtoQ[key] = GenModUpConstants(P[:key.From+1], Q[:key.To+1])
+	}
 }
 
 // ModUpConstants stores the necessary parameters for RNS basis extension.
@@ -102,7 +119,7 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 		qoverqiinvqi[i] = ring.ModexpMontgomery(qiStar, int(qi-2), qi, mredQ[i], bredQ[i])
 	}
 	QQ, RQ := ProductDivModBig(P, Q)
-	fmt.Println(QQ, RQ)
+	// fmt.Println(QQ, RQ)
 	for j := range Q {
 		temp := new(big.Float)
 		temp = temp.Quo(new(big.Float).SetInt(RQ[j]), new(big.Float).SetUint64((Q[j])))
@@ -194,6 +211,42 @@ func (be *BasisExtender) ShallowCopy() *BasisExtender {
 	}
 }
 
+func (be *BasisExtender) ModUpQtoP(levelP int, polQ, polP ring.Poly) {
+	// if polQ.Level() != 0 {
+	// 	panic("nope, level must be 0")
+	// }
+
+	ringQ := be.ringQ
+	ringP := be.ringP.AtLevel(levelP)
+	// buffQ := be.ringQ.NewPoly()
+
+	Q := ringQ.ModuliChain()
+	q := Q[0]
+	// levelQ := len(Q) - 1
+	// levelQ := 0
+	P := ringP.ModuliChain()
+	QHalf := q >> 1
+	N := ringQ.N()
+	var pos, neg, tmp uint64
+	for j := 0; j < N; j++ {
+		coeff := polQ.Coeffs[0][j]
+		pos, neg = 1, 0
+		if coeff > QHalf {
+			coeff = q - coeff
+			pos, neg = 0, 1
+		}
+
+		for i := 0; i < levelP+1; i++ {
+			tmp = coeff % P[i]
+			polP.Coeffs[i][j] = tmp*pos + (P[i]-tmp)*neg
+			// polP.Coeffs[i][j] = coeff % P[i]
+		}
+
+	}
+
+	// ModUpExact(buffQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+}
+
 func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP, polQ ring.Poly) {
 
 	// ringQ := be.ringQ.AtLevel(levelQ)
@@ -204,22 +257,25 @@ func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP, polQ ring.Poly)
 	// PHalf.Rsh(PHalf, 1)
 
 	// ringP.AddScalarBigint(polP, PHalf, buffP)
+	polQ.Resize(levelQ)
 	ModUpExact(polP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
+
 	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
 	// QHalf.Rsh(QHalf, 1)
-	// ringQ.SubScalarBigint(polQ, PHalf, polQ)
+	// ringQ.SubScalarBigint(polQ, QHalf, polQ)
 }
 
 func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ, polP ring.Poly) {
 
 	// ringQ := be.ringQ.AtLevel(levelQ)
-	// ringP := be.ringP.AtLevel(levelP)
+	// // ringP := be.ringP.AtLevel(levelP)
 	// buffQ := be.buffQ
 
 	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
 	// QHalf.Rsh(QHalf, 1)
 
 	// ringQ.AddScalarBigint(polQ, QHalf, buffQ)
+	polP.Resize(levelP)
 	ModUpExact(polQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
 	// PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
 	// PHalf.Rsh(PHalf, 1)

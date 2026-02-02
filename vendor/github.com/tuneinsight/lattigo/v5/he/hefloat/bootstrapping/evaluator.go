@@ -194,7 +194,6 @@ func (eval *Evaluator) initialize(btpParams Parameters) (err error) {
 	offset := eval.Mod1Parameters.ScalingFactor().Float64() / eval.Mod1Parameters.MessageRatio()
 
 	C2SScaling := new(big.Float).SetFloat64(qDiv / (K * scFac * qDiff))
-	// C2SScaling = new(big.Float).SetFloat64(1)
 	StCScaling := new(big.Float).SetFloat64(scale / offset)
 
 	if eval.CoeffsToSlotsParameters.Scaling == nil {

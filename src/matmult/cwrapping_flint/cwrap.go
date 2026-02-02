@@ -13,6 +13,28 @@ import (
 	"unsafe"
 )
 
+// 행렬 곱셈 결과를 효율적으로 계산하는 헬퍼 함수
+func ComputeCombinedMat(n, startIdx, count int, roots []complex128, div complex128, isInverse bool) []complex128 {
+	res := make([]complex128, n*n)
+
+	var inv C.int
+	if isInverse {
+		inv = 1
+	}
+
+	C.computeCombinedMat_blas(
+		C.int(n),
+		C.int(startIdx),
+		C.int(count),
+		(*C.dcomplex)(unsafe.Pointer(&roots[0])),
+		(C.dcomplex)(div),
+		inv,
+		(*C.dcomplex)(unsafe.Pointer(&res[0])),
+	)
+
+	return res // column-major: res[r + c*n]
+}
+
 func Mult_mod_mat(A, B [][]uint64, size_a, size_b, size_c int, p uint64) [][]uint64 {
 	a := make([]C.ulonglong, size_a*size_b)
 	b := make([]C.ulonglong, size_b*size_c)
@@ -124,6 +146,26 @@ func Mult_mod_mat_Blas_Inplace(A, B, res []float64, size_a, size_b, size_c, leve
 		C.uint(size_b),
 		C.uint(size_c),
 		C.uint(level),
+	)
+}
+
+func Mult_mod_mat_Blas_Inplace_Stride(A, B, res []float64, size_a, size_b, size_c, level, lda, ldb, ldc int) {
+	// --- 평탄화 (uint64 -> float64) ---
+	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+	// C가 결과를 out에 써줌
+
+	// --- C 호출 (포인터 캐스팅만) ---
+	C.multiply_mod_matrix_blas_Inplace_Stride(
+		(*C.double)(unsafe.Pointer(&A[0])),
+		(*C.double)(unsafe.Pointer(&B[0])),
+		(*C.double)(unsafe.Pointer(&res[0])),
+		C.uint(size_a),
+		C.uint(size_b),
+		C.uint(size_c),
+		C.uint(level),
+		C.uint(lda),
+		C.uint(ldb),
+		C.uint(ldc),
 	)
 }
 

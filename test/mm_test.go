@@ -10,6 +10,7 @@ import (
 	"github.com/lifejade/mm/src/matmult"
 	cwrappingflint "github.com/lifejade/mm/src/matmult/cwrapping_flint"
 	"github.com/lifejade/mm/src/transpose"
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
@@ -278,9 +279,9 @@ func Test_PCMM(t *testing.T) {
 
 	fmt.Println("start flint")
 	starttime = time.Now()
-	debugCTS(cts, params, encoder, decryptor)
+	util.DebugCTS(cts, params, encoder, decryptor)
 	result2 := matmult.PPMM_Flint_CRT(cts, u, params, n)
-	debugCTS(result2, params, encoder, decryptor)
+	util.DebugCTS(result2, params, encoder, decryptor)
 	elapse = time.Since(starttime)
 	fmt.Println("ppmm time : ", elapse)
 
@@ -403,6 +404,154 @@ func Test_PCMMTime(t *testing.T) {
 			fmt.Println("PCMM time : ", elapse)
 			fmt.Println()
 		}
+	}
+}
+
+func Test_PCMM_Inplace(t *testing.T) {
+
+	//CPU full power
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            5,
+		LogQ:            []int{48, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56, 56},
+		LogP:            []int{52, 52},
+		LogDefaultScale: 40,
+	}
+	//parameter init
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	N := 1 << params.LogN()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, N)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+	_ = evaluator
+	fmt.Println("ckks log degree : ", params.LogN())
+
+	ringQ := params.RingQ().AtLevel(params.MaxLevel())
+
+	value := make([]float64, N)
+	for i := range value {
+		value[i] = 0.01
+	}
+
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt.IsBatched = false
+	encoder.Encode(value, pt)
+	cts := make([]*rlwe.Ciphertext, N)
+	for i := range cts {
+		cts[i], _ = encryptor.EncryptNew(pt)
+		ringQ.INTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.INTT(cts[i].Value[1], cts[i].Value[1])
+	}
+
+	P := []uint64{4107427, 3868699, 4073143, 3639397, 3835109, 3377447, 3338903, 3314141, 3816173, 3731251, 3925091, 3500261, 3507403, 3368353, 3598601, 3637573, 3387523, 3489259, 3804751, 4002811, 3417251, 3245357, 3659177, 4047647, 3367981, 3984439, 3621473, 3565147, 3789193, 3174547, 3293959, 3567803, 3856499, 3299617, 3939619, 4004683, 3803347, 3501467, 3518719, 3631919}
+	PLevel := 38
+	P = P[:PLevel+1]
+	ringP, _ := ring.NewRing(N, P)
+	be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{params.MaxLevel(), PLevel}}, []matmult.Key{{PLevel, params.MaxLevel()}})
+
+	polys := make([][]ring.Poly, 2)
+	for i := range polys {
+		polys[i] = make([]ring.Poly, N)
+		for j := range polys[i] {
+			polys[i][j] = ringP.NewPoly()
+		}
+	}
+	for d := range 2 {
+		for i := range N {
+			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], polys[d][i])
+		}
+	}
+
+	scale := 1 << 10
+	mat := make([]float64, (PLevel+1)*N*N)
+	for i := range mat {
+		mat[i] = float64(int(0.1 * float64(scale)))
+	}
+
+	buff1 := make([]float64, (PLevel+1)*N*N)
+	buff2 := make([]float64, (PLevel+1)*N*N)
+
+	matmult.PPMM_Blas_CRT_Inplace(polys, mat, N, N, N, PLevel+1, 2, ringP, buff1, buff2)
+	matmult.PPMM_Blas_CRT_Inplace(polys, mat, N, N, N, PLevel+1, 2, ringP, buff1, buff2)
+
+	// mat := make([][][]uint64, PLevel+1)
+	// for i := range mat {
+	// 	mat[i] = make([][]uint64, N)
+	// 	for j := range mat[i] {
+	// 		mat[i][j] = make([]uint64, N)
+	// 		for k := range mat[i][j] {
+	// 			mat[i][j][k] = 1
+	// 		}
+	// 	}
+	// }
+	// for i := range 2 {
+	// 	matmult.PPMM_Blas_CRT(polys[i], mat, params, N, N, N, PLevel+1, ringP, polys[i])
+	// }
+
+	for d := range 2 {
+		for i := range N {
+			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), polys[d][i], cts[i].Value[d])
+
+		}
+	}
+
+	for i := range cts {
+		ringQ.NTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.NTT(cts[i].Value[1], cts[i].Value[1])
+		evaluator.Mul(cts[i], 1.0/float64(scale), cts[i])
+		evaluator.Rescale(cts[i], cts[i])
+		evaluator.Mul(cts[i], 1.0/float64(scale), cts[i])
+		evaluator.Rescale(cts[i], cts[i])
+		ptres := decryptor.DecryptNew(cts[i])
+		encoder.Decode(ptres, value)
+		fmt.Println(value[:10])
 	}
 }
 
@@ -549,13 +698,13 @@ func Test_PPMM_Blas_CRT_Inplace(t *testing.T) {
 	runtime.GOMAXPROCS(1) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 
 	P := []uint64{4107427, 3868699, 4073143, 3639397, 3835109, 3377447, 3338903, 3314141, 3816173, 3731251, 3925091, 3500261, 3507403, 3368353, 3598601, 3637573, 3387523, 3489259, 3804751, 4002811, 3417251, 3245357, 3659177, 4047647, 3367981, 3984439, 3621473, 3565147, 3789193, 3174547, 3293959, 3567803, 3856499, 3299617, 3939619, 4004683, 3803347, 3501467, 3518719, 3631919}
-	N := 1 << 16
-	arrLenP := []int{1, 36}
+	N := 1 << 5
+	arrLenP := []int{36}
 	arrSparseN := []int{32, 64, 128, 256}
 	for l := range arrLenP {
 		lenP := arrLenP[l]
 		fmt.Println("lenP : ", lenP)
-		ringQ, _ := ring.NewRing(1<<16, P[:lenP])
+		ringQ, _ := ring.NewRing(1<<5, P[:lenP])
 		for sn := range arrSparseN {
 			sparseN := arrSparseN[sn]
 
@@ -589,8 +738,8 @@ func Test_PPMM_Blas_CRT_Inplace(t *testing.T) {
 			matmult.PPMM_Blas_CRT_Inplace(cts, u, sparseN, sparseN, N, lenP, 2, ringQ, buffer1, buffer2)
 			elapse := time.Since(starttime)
 			fmt.Println("PCMM time : ", elapse)
-			fmt.Println(cts[0][0].Coeffs[0])
-			fmt.Println(cts[1][0].Coeffs[0])
+			fmt.Println(cts[0][0].Coeffs[2])
+			fmt.Println(cts[1][0].Coeffs[2])
 			fmt.Println()
 		}
 	}

@@ -10,9 +10,12 @@ import (
 
 	"github.com/lifejade/mm/src/matmult"
 	"github.com/lifejade/mm/src/transpose"
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
+	"github.com/tuneinsight/lattigo/v5/ring"
 	"github.com/tuneinsight/lattigo/v5/schemes/ckks"
+	"github.com/tuneinsight/lattigo/v5/utils/sampling"
 )
 
 func Test_FFT(t *testing.T) {
@@ -427,12 +430,15 @@ func Test_SFLC(t *testing.T) {
 	// 		SFI_[i][j] /= complex(float64(n), 0)
 	// 	}
 	// }
+	fmt.Println()
 	for i := range SFI_LC {
 		SFI_ = mul(SFI_, SFI_LC[len(SFI_LC)-i-1])
 	}
+
 	for i := range SFI {
 		fmt.Println(SFI[i])
 	}
+	fmt.Println()
 	for i := range SFI_ {
 		fmt.Println(SFI_[i])
 	}
@@ -877,7 +883,7 @@ func Test_S2CLC(t *testing.T) {
 	// }
 	fmt.Println("generate Evaluator end")
 
-	SF, _ := matmult.GenSFMat_CL(params, []int{2, 1, 1}, []int{2, 1, 1})
+	SF, _ := matmult.GenSFMat_CL(params, []int{2, 2}, []int{2, 2})
 	scale := float64(1 << 25)
 	mat0 := make([][][][]uint64, len(SF))
 	mat1 := make([][][][]uint64, len(SF))
@@ -1105,7 +1111,8 @@ func Test_S2CLC(t *testing.T) {
 		evaluator.Add(res[i], res11i[i], res[i])
 	}
 
-	result0 := transpose.Transpose(res, params, evaluator, encoder, 2*n)
+	// result0 := transpose.Transpose(res, params, evaluator, encoder, 2*n)
+	result0 := res
 
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
@@ -1128,7 +1135,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
 	SchemeParams := hefloat.ParametersLiteral{
-		LogN:            16,
+		LogN:            5,
 		LogQ:            []int{48, 40, 40, 48},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
@@ -1158,7 +1165,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 	rlk = kgen.GenRelinearizationKeyNew(sk)
 
 	// generate keys - Rotating key
-	galEls := make([]uint64, 1)
+	galEls := make([]uint64, n*2)
 	for i := range galEls {
 		galEls[i] = uint64(2*i + 1)
 	}
@@ -1194,9 +1201,9 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 	fmt.Println("ckks log degree : ", params.LogN())
 
-	CL_arr := []int{7, 8}
-	_, SFI := matmult.GenSFMat_CL(params, CL_arr, CL_arr)
-	scale := float64(1 << 40)
+	CL_arr := []int{2, 2}
+	_, SFI := matmult.GenSFMat_CL_Slow(params, CL_arr, CL_arr)
+	scale := float64(1 << 10)
 	mat0 := make([][][][][]uint64, len(SFI))
 	mat0i := make([][][][][]uint64, len(SFI))
 	mat0si := make([][][][][]uint64, len(SFI))
@@ -1240,6 +1247,10 @@ func Test_C2SLC_Opt(t *testing.T) {
 
 		inter_it = inter
 	}
+	fmt.Println(params.Q())
+	fmt.Println(mat0)
+	fmt.Println()
+	fmt.Println(mat0i)
 
 	value := make([]float64, 2*n)
 	for i := range value {
@@ -1269,28 +1280,28 @@ func Test_C2SLC_Opt(t *testing.T) {
 	temp1_ := make([]*rlwe.Ciphertext, 2*n)
 	temp2 := make([]*rlwe.Ciphertext, 2*n)
 	temp2_ := make([]*rlwe.Ciphertext, 2*n)
-	ctZero := matmult.CtZero(params, encoder, encryptor)
+	ctZero := util.CtZero(params, encoder, encryptor)
 	for i := range 2 * n {
-		res00[i] = matmult.CtZero(params, encoder, encryptor)
-		res00i[i] = matmult.CtZero(params, encoder, encryptor)
-		res01[i] = matmult.CtZero(params, encoder, encryptor)
-		res01i[i] = matmult.CtZero(params, encoder, encryptor)
+		res00[i] = util.CtZero(params, encoder, encryptor)
+		res00i[i] = util.CtZero(params, encoder, encryptor)
+		res01[i] = util.CtZero(params, encoder, encryptor)
+		res01i[i] = util.CtZero(params, encoder, encryptor)
 
-		res10[i] = matmult.CtZero(params, encoder, encryptor)
-		res10i[i] = matmult.CtZero(params, encoder, encryptor)
-		res11[i] = matmult.CtZero(params, encoder, encryptor)
-		res11i[i] = matmult.CtZero(params, encoder, encryptor)
+		res10[i] = util.CtZero(params, encoder, encryptor)
+		res10i[i] = util.CtZero(params, encoder, encryptor)
+		res11[i] = util.CtZero(params, encoder, encryptor)
+		res11i[i] = util.CtZero(params, encoder, encryptor)
 
-		temp1[i] = matmult.CtZero(params, encoder, encryptor)
-		temp1_[i] = matmult.CtZero(params, encoder, encryptor)
-		temp2[i] = matmult.CtZero(params, encoder, encryptor)
-		temp2_[i] = matmult.CtZero(params, encoder, encryptor)
+		temp1[i] = util.CtZero(params, encoder, encryptor)
+		temp1_[i] = util.CtZero(params, encoder, encryptor)
+		temp2[i] = util.CtZero(params, encoder, encryptor)
+		temp2_[i] = util.CtZero(params, encoder, encryptor)
 	}
 
 	fmt.Println("start c2s")
 	starttime = time.Now()
-	//ctT := transpose.Transpose(cts, params, evaluator, encoder, 2*n)
-	ctT := cts
+	ctT := transpose.Transpose(cts, params, evaluator, encoder, 2*n)
+	// ctT := cts
 	ctTC := make([]*rlwe.Ciphertext, 2*n)
 	fmt.Println("ctT ctTC")
 	for i := range ctTC {
@@ -1486,7 +1497,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 					temp2_[n+stpoint+inter*idx_ll] = res_temp[idx_ll]
 				}
 			}
-			res10 = matmult.SubMany(temp1, temp1_, evaluator)
+			res10 = matmult.SubMany(temp1_, temp1, evaluator)
 			res11i = matmult.AddMany(temp2, temp2_, evaluator)
 
 			for i := range 2 * n {
@@ -1499,7 +1510,7 @@ func Test_C2SLC_Opt(t *testing.T) {
 					evaluator.Rescale(res01i[i], res01i[i])
 				}
 				if res10[i] != nil {
-					evaluator.Mul(res10[i], -1.0/scale, res10[i])
+					evaluator.Mul(res10[i], 1.0/scale, res10[i])
 					evaluator.Rescale(res10[i], res10[i])
 				}
 				if res11i[i] != nil {
@@ -1739,10 +1750,10 @@ func Test_C2SLC_Opt(t *testing.T) {
 	res0 = matmult.PPMM_Flint(res0, matrev, params, 2*n)
 	res1 = matmult.PPMM_Flint(res1, matrev, params, 2*n)
 
-	//result0 := transpose.Transpose(res0, params, evaluator, encoder, 2*n)
-	//result1 := transpose.Transpose(res1, params, evaluator, encoder, 2*n)
-	result0 := res0
-	result1 := res1
+	result0 := transpose.Transpose(res0, params, evaluator, encoder, 2*n)
+	result1 := transpose.Transpose(res1, params, evaluator, encoder, 2*n)
+	// result0 := res0
+	// result1 := res1
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
 	fmt.Println(result0[0].LogScale())
@@ -1767,5 +1778,1060 @@ func Test_C2SLC_Opt(t *testing.T) {
 		fmt.Println(resvalue)
 	}
 	fmt.Println(result0[0].LogScale())
+
+}
+
+func Test_C2S_New(t *testing.T) {
+
+	//CPU full power
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            10,
+		LogQ:            []int{48, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40},
+		LogP:            []int{52, 52, 52},
+		LogDefaultScale: 40,
+	}
+	//parameter init
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	N := 1 << params.LogN()
+	n := N / 2
+	sparseN := N
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, N)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		gal := galEls[i]
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(gal, sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	fmt.Println("ckks log degree : ", params.LogN())
+
+	CL_arr := []int{5, 4}
+	_, SFI := matmult.GenSFMat_CL(params, CL_arr, CL_arr)
+	scale := float64(1 << 20)
+	mat0 := make([][][]float64, len(SFI))
+	mat0i := make([][][]float64, len(SFI))
+	// mat0si := make([][][]float64, len(SFI))
+	ringQ := params.RingQ()
+	value := make([]float64, N)
+
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt.IsBatched = false
+
+	encoder.Encode(value, pt)
+	cts := make([]*rlwe.Ciphertext, N)
+	for i := range cts {
+		value := make([]float64, N)
+		for j := range value {
+			value[j] = 0.0001 * float64(j)
+		}
+		encoder.Encode(value, pt)
+		cts[i], _ = encryptor.EncryptNew(pt)
+		ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[1], cts[i].Value[1])
+	}
+
+	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	PLevel := 30
+	P = P[:PLevel+1]
+	ringP, _ := ring.NewRing(N, P)
+	be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{params.MaxLevel(), PLevel}}, []matmult.Key{{PLevel, params.MaxLevel()}})
+
+	fmt.Println("mat gen start")
+	inter_it := n
+	for l := range SFI {
+		inter := inter_it >> CL_arr[l]
+		llen := (1 << CL_arr[l])
+		mat0[l] = make([][]float64, n/llen)
+		mat0i[l] = make([][]float64, n/llen)
+
+		// mat0si[l] = make([][]float64, n/llen)
+		for t := range n / llen {
+			mat0[l][t] = make([]float64, len(P)*llen*llen)
+			mat0i[l][t] = make([]float64, len(P)*llen*llen)
+			// mat0si[l][t] = make([]float64, len(params.Q())*llen*llen)
+			stpoint := inter_it*int(t/inter) + (t % inter)
+			for q := range len(P) {
+				for i := range llen {
+					for j := range llen {
+						idx := q*llen*llen + i*llen + j
+						if real(SFI[l][stpoint+inter*i][stpoint+inter*j]) >= 0 {
+							mat0[l][t][idx] = float64(int64(real(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q]))
+						} else {
+							mat0[l][t][idx] = float64(int64(P[q]) - (int64(-real(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q])))
+						}
+						if imag(SFI[l][stpoint+inter*i][stpoint+inter*j]) >= 0 {
+							mat0i[l][t][idx] = float64(int64(imag(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q]))
+						} else {
+							mat0i[l][t][idx] = float64(int64(P[q]) - (int64(-imag(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q])))
+						}
+						// mat0si[l][t][idx] = (mat0[l][t][idx] + mat0i[l][t][idx])
+					}
+				}
+			}
+		}
+
+		inter_it = inter
+	}
+	fmt.Println("mat gen end")
+
+	inputPolys := make([][]ring.Poly, 2)
+	for i := range inputPolys {
+		inputPolys[i] = make([]ring.Poly, sparseN)
+		for j := range inputPolys[i] {
+			inputPolys[i][j] = ringP.NewPoly()
+		}
+	}
+
+	inputPolysC := make([][]ring.Poly, 2)
+	for i := range inputPolysC {
+		inputPolysC[i] = make([]ring.Poly, sparseN)
+		for j := range inputPolysC[i] {
+			inputPolysC[i][j] = ringP.NewPoly()
+		}
+	}
+	result := make([]*rlwe.Ciphertext, N)
+	result2 := make([]*rlwe.Ciphertext, N)
+	pttemp := hefloat.NewPlaintext(params, params.MaxLevel())
+	pttemp.IsBatched = false
+	encoder.Encode(value, pttemp)
+	fmt.Println("start ct res pre allocate")
+	for i := range N {
+		cttemp, _ := encryptor.EncryptNew(pttemp)
+		result[i] = cttemp.CopyNew()
+		result2[i] = cttemp.CopyNew()
+	}
+	fmt.Println("prealloc end")
+	fmt.Println(result[0].LogScale())
+
+	// sc := rlwe.NewScale(1)
+	// for i := range 2 {
+	// 	q := rlwe.NewScale(params.Q()[params.MaxLevel()-i])
+	// 	sc = sc.Mul(q)
+	// }
+
+	ppmmbuffer1 := make([]float64, len(P)*N*N)
+	ppmmbuffer2 := make([]float64, len(P)*N*N)
+
+	resPolys00 := make([][]ring.Poly, 2)
+	resPolys00i := make([][]ring.Poly, 2)
+	resPolys01 := make([][]ring.Poly, 2)
+	resPolys01i := make([][]ring.Poly, 2)
+	resPolys10 := make([][]ring.Poly, 2)
+	resPolys10i := make([][]ring.Poly, 2)
+	resPolys11 := make([][]ring.Poly, 2)
+	resPolys11i := make([][]ring.Poly, 2)
+	for i := range 2 {
+		resPolys00[i] = make([]ring.Poly, N)
+		resPolys00i[i] = make([]ring.Poly, N)
+		resPolys01[i] = make([]ring.Poly, N)
+		resPolys01i[i] = make([]ring.Poly, N)
+		resPolys10[i] = make([]ring.Poly, N)
+		resPolys10i[i] = make([]ring.Poly, N)
+		resPolys11[i] = make([]ring.Poly, N)
+		resPolys11i[i] = make([]ring.Poly, N)
+		for j := range N {
+			resPolys00[i][j] = ringP.NewPoly()
+			resPolys00i[i][j] = ringP.NewPoly()
+			resPolys01[i][j] = ringP.NewPoly()
+			resPolys01i[i][j] = ringP.NewPoly()
+			resPolys10[i][j] = ringP.NewPoly()
+			resPolys10i[i][j] = ringP.NewPoly()
+			resPolys11[i][j] = ringP.NewPoly()
+			resPolys11i[i][j] = ringP.NewPoly()
+		}
+	}
+	work := make([]*rlwe.Ciphertext, N)
+	for i := range work {
+		work[i] = encryptor.EncryptZeroNew(params.MaxLevel())
+	}
+	aux := make([]*rlwe.Ciphertext, N)
+	for i := range aux {
+		aux[i] = encryptor.EncryptZeroNew(params.MaxLevel())
+	}
+
+	fmt.Println("start c2s")
+	starttime = time.Now()
+	util.PrintMemUsage()
+
+	transpose.Transpose3(cts, params, evaluator, ringQ.AtLevel(cts[0].Level()), N, N, work, aux, cts)
+
+	fmt.Println("mod switch start")
+
+	for i := range sparseN {
+		for d := range 2 {
+			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
+		}
+		if i < n {
+			ringQ.Neg(cts[i+n].Value[0], work[0].Value[0])
+			ringQ.Neg(cts[i+n].Value[1], work[0].Value[1])
+		} else {
+			work[0] = cts[i-n]
+		}
+		for d := range 2 {
+			be.ModSwitchQtoP(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
+		}
+	}
+	fmt.Println("mod switch end")
+	fmt.Println("ppmm start")
+	inter_it = n
+	for l := range len(SFI) {
+		inter := inter_it >> CL_arr[l]
+		llen := (1 << CL_arr[l])
+		if l == 0 {
+			for t := range n / llen {
+				//00 ~ 01
+				// fmt.Println(inputPolys[0][0].Coeffs[0][:100])
+				stpoint := (t % inter) + inter_it*int(t/inter)
+
+				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
+
+				//10~11
+				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
+
+			}
+
+		} else if l == len(SFI)-1 {
+			for t := range n / llen {
+				stpoint := (t % inter) + inter_it*int(t/inter)
+				matmult.PPMM_Blas_CRT_Stride(resPolys00, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys00i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys01, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys01i, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
+			}
+			matmult.SubManyRing(ringP, resPolys00, resPolys00i, resPolys00)
+			matmult.AddManyRing(ringP, resPolys01, resPolys01i, resPolys01i)
+
+			for t := range n / llen {
+				stpoint := (t % inter) + inter_it*int(t/inter)
+				matmult.PPMM_Blas_CRT_Stride(resPolys10, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys10i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys11, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
+				matmult.PPMM_Blas_CRT_Stride(resPolys11i, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
+			}
+			matmult.SubManyRing(ringP, resPolys10i, resPolys10, resPolys10)
+			matmult.AddManyRing(ringP, resPolys11, resPolys11i, resPolys11i)
+
+		}
+		inter_it = inter
+	}
+	matmult.AddManyRing(ringP, resPolys00, resPolys01i, resPolys00)
+	matmult.AddManyRing(ringP, resPolys10, resPolys11i, resPolys10)
+
+	rev := matmult.BitReversePermutationMatrix(n)
+	matrev := make([]float64, len(P)*N*N)
+	for p := range len(P) {
+		for i := range N {
+			for j := range N {
+				if (i < n && j < n) || (i >= n && j >= n) {
+					matrev[p*N*N+i*N+j] = (real(rev[i%n][j%n]))
+				}
+			}
+		}
+	}
+
+	matmult.PPMM_Blas_CRT_Inplace(resPolys00, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+	matmult.PPMM_Blas_CRT_Inplace(resPolys10, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+
+	for i := range N {
+		for idx := range 2 {
+			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+		}
+
+		q := rlwe.NewScale(params.Q()[result[i].Level()])
+		util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
+		util.Rescale_NonNTT(evaluator, result[i], result[i])
+		util.Mul_ScaleExact(evaluator, result2[i], 1.0/(scale), result2[i], q)
+		util.Rescale_NonNTT(evaluator, result2[i], result2[i])
+
+		q = rlwe.NewScale(params.Q()[result[i].Level()])
+		util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
+		util.Rescale_NonNTT(evaluator, result[i], result[i])
+		util.Mul_ScaleExact(evaluator, result2[i], 1.0/(scale), result2[i], q)
+		util.Rescale_NonNTT(evaluator, result2[i], result2[i])
+	}
+	fmt.Println(result[0].Level())
+
+	transpose.Transpose3(result, params, evaluator, ringQ.AtLevel(result[0].Level()), N, sparseN, work, aux, result)
+	transpose.Transpose3(result2, params, evaluator, ringQ.AtLevel(result2[0].Level()), N, sparseN, work, aux, result2)
+	elapse = time.Since(starttime)
+	fmt.Println(elapse)
+
+	resvalue := make([]complex128, n)
+	for i := range result {
+
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+		result[i].IsBatched = true
+		dept := decryptor.DecryptNew(result[i])
+		encoder.Decode(dept, resvalue)
+
+		fmt.Println(resvalue)
+		if i > 100 {
+			break
+		}
+	}
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
+	for i := range result2 {
+
+		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[0], result2[i].Value[0])
+		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[1], result2[i].Value[1])
+		result2[i].IsBatched = true
+		dept := decryptor.DecryptNew(result2[i])
+		encoder.Decode(dept, resvalue)
+
+		fmt.Println(resvalue)
+		if i > 100 {
+			break
+		}
+	}
+	fmt.Println(result2[0].LogScale())
+
+}
+
+func Test_CheckPrecTrans(t *testing.T) {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            5,
+		LogQ:            []int{51, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46, 46},
+		LogP:            []int{51},
+		LogDefaultScale: 46,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	n := 1 << params.LogN()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	galLen := n
+	fmt.Println("galLen : ", galLen)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, galLen)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+
+	fmt.Println("generate Evaluator end")
+	runtime.GOMAXPROCS(1)
+
+	_, _, _, _ = encoder, encryptor, decryptor, evaluator
+
+	value := make([]float64, n)
+	for i := range value {
+		value[i] = sampling.RandFloat64(-1, 1)
+	}
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt.IsBatched = false
+	encoder.Encode(value, pt)
+
+	cts := make([]*rlwe.Ciphertext, n)
+	for i := range cts {
+		cts[i], _ = encryptor.EncryptNew(pt)
+	}
+
+	res1 := transpose.Transpose(cts, params, evaluator, encoder, n)
+
+	for i := range res1 {
+		value := make([]float64, n)
+		pt_ := decryptor.DecryptNew(res1[i])
+		encoder.Decode(pt_, value)
+		fmt.Println(value)
+	}
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
+
+	for i := range cts {
+		params.RingQ().INTT(cts[i].Value[0], cts[i].Value[0])
+		params.RingQ().INTT(cts[i].Value[1], cts[i].Value[1])
+	}
+
+	work := make([]*rlwe.Ciphertext, n)
+	for i := range work {
+		work[i], _ = encryptor.EncryptNew(pt)
+	}
+	aux := make([]*rlwe.Ciphertext, n)
+	for i := range aux {
+		aux[i], _ = encryptor.EncryptNew(pt)
+	}
+
+	res2 := make([]*rlwe.Ciphertext, n)
+	for i := range res2 {
+		res2[i], _ = encryptor.EncryptNew(pt)
+	}
+
+	transpose.Transpose3(cts, params, evaluator, params.RingQ().AtLevel(cts[0].Level()), n, n, work, aux, cts)
+	res2 = cts
+	for i := range res2 {
+		params.RingQ().NTT(res2[i].Value[0], res2[i].Value[0])
+		params.RingQ().NTT(res2[i].Value[1], res2[i].Value[1])
+	}
+
+	for i := range res2 {
+		value := make([]float64, n)
+		pt_ := decryptor.DecryptNew(res2[i])
+		encoder.Decode(pt_, value)
+		fmt.Println(value)
+	}
+}
+
+func Test_C2S_New_Check(t *testing.T) {
+
+	//CPU full power
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	fmt.Println("Maximum number of CPUs: ", runtime.GOMAXPROCS(0))
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            5,
+		LogQ:            []int{48, 56, 56, 56},
+		LogP:            []int{52, 52},
+		LogDefaultScale: 40,
+	}
+	//parameter init
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("ckks parameter init end")
+
+	// generate keys
+	//fmt.Println("generate keys")
+	//keytime := time.Now()
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	N := 1 << params.LogN()
+	n := N / 2
+	sparseN := N
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, N)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	starttime := time.Now()
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+	elapse := time.Since(starttime)
+	fmt.Println(elapse)
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	fmt.Println("generate Evaluator end")
+
+	fmt.Println("ckks log degree : ", params.LogN())
+
+	CL_arr := []int{2, 2}
+	_, SFI := matmult.GenSFMat_CL(params, CL_arr, CL_arr)
+	scale := float64(1 << 40)
+	mat0 := make([][][]float64, len(SFI))
+	mat0i := make([][][]float64, len(SFI))
+	// mat0si := make([][][]float64, len(SFI))
+	ringQ := params.RingQ()
+	value := make([]float64, N)
+	for i := range value {
+		value[i] = 0.001
+	}
+
+	pt := hefloat.NewPlaintext(params, params.MaxLevel())
+	pt.IsBatched = false
+
+	encoder.Encode(value, pt)
+	ct, _ := encryptor.EncryptNew(pt)
+	cts := make([]*rlwe.Ciphertext, 2*n)
+	for i := range cts {
+		cts[i], _ = encryptor.EncryptNew(pt)
+		ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[0], cts[i].Value[0])
+		ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[1], cts[i].Value[1])
+	}
+
+	P := []uint64{4107427, 3868699, 4073143, 3639397, 3835109, 3377447, 3338903, 3314141, 3816173, 3731251, 3925091, 3500261, 3507403, 3368353, 3598601, 3637573, 3387523, 3489259, 3804751, 4002811, 3417251, 3245357, 3659177, 4047647, 3367981, 3984439, 3621473, 3565147, 3789193, 3174547, 3293959, 3567803, 3856499, 3299617, 3939619, 4004683, 3803347, 3501467, 3518719, 3631919}
+	PLevel := 10
+	P = P[:PLevel+1]
+	ringP, _ := ring.NewRing(N, P)
+	be := matmult.NewBasisExtender(ringQ, ringP, []matmult.Key{{params.MaxLevel(), PLevel}}, []matmult.Key{{PLevel, params.MaxLevel()}})
+
+	fmt.Println("mat gen start")
+	inter_it := n
+	for l := range SFI {
+		inter := inter_it >> CL_arr[l]
+		llen := (1 << CL_arr[l])
+		mat0[l] = make([][]float64, n/llen)
+		mat0i[l] = make([][]float64, n/llen)
+
+		// mat0si[l] = make([][]float64, n/llen)
+		for t := range n / llen {
+			mat0[l][t] = make([]float64, len(P)*llen*llen)
+			mat0i[l][t] = make([]float64, len(P)*llen*llen)
+			// mat0si[l][t] = make([]float64, len(params.Q())*llen*llen)
+			stpoint := inter_it*int(t/inter) + (t % inter)
+			for q := range len(P) {
+				for i := range llen {
+					for j := range llen {
+						idx := q*llen*llen + i*llen + j
+						if real(SFI[l][stpoint+inter*i][stpoint+inter*j]) >= 0 {
+							mat0[l][t][idx] = float64(int64(real(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q]))
+						} else {
+							mat0[l][t][idx] = float64(int64(P[q]) - (int64(-real(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q])))
+						}
+						if imag(SFI[l][stpoint+inter*i][stpoint+inter*j]) >= 0 {
+							mat0i[l][t][idx] = float64(int64(imag(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q]))
+						} else {
+							mat0i[l][t][idx] = float64(int64(P[q]) - (int64(-imag(SFI[l][stpoint+inter*i][stpoint+inter*j])*scale) % int64(P[q])))
+						}
+						// mat0si[l][t][idx] = (mat0[l][t][idx] + mat0i[l][t][idx])
+					}
+				}
+			}
+		}
+
+		inter_it = inter
+	}
+	fmt.Println("mat gen end")
+	fmt.Println(P)
+	fmt.Println(mat0)
+	fmt.Println()
+	fmt.Println(mat0i)
+
+	inputPolys := make([][]ring.Poly, 2)
+	for i := range inputPolys {
+		inputPolys[i] = make([]ring.Poly, sparseN)
+		for j := range inputPolys[i] {
+			inputPolys[i][j] = ringP.NewPoly()
+		}
+	}
+
+	inputPolysC := make([][]ring.Poly, 2)
+	for i := range inputPolysC {
+		inputPolysC[i] = make([]ring.Poly, sparseN)
+		for j := range inputPolysC[i] {
+			inputPolysC[i][j] = ringP.NewPoly()
+		}
+	}
+	result := make([]*rlwe.Ciphertext, N)
+	result2 := make([]*rlwe.Ciphertext, N)
+	pttemp := hefloat.NewPlaintext(params, params.MaxLevel())
+	pttemp.IsBatched = false
+	encoder.Encode(value, pttemp)
+	fmt.Println("start ct res pre allocate")
+	for i := range N {
+		cttemp, _ := encryptor.EncryptNew(pttemp)
+		result[i] = cttemp.CopyNew()
+		result2[i] = cttemp.CopyNew()
+	}
+	fmt.Println("prealloc end")
+	fmt.Println(result[0].LogScale())
+
+	// sc := rlwe.NewScale(1)
+	// for i := range 2 {
+	// 	q := rlwe.NewScale(params.Q()[params.MaxLevel()-i])
+	// 	sc = sc.Mul(q)
+	// }
+
+	ppmmbuffer1 := make([]float64, len(P)*N*N)
+	ppmmbuffer2 := make([]float64, len(P)*N*N)
+
+	resPolys00 := make([][]ring.Poly, 2)
+	resPolys00i := make([][]ring.Poly, 2)
+	resPolys01 := make([][]ring.Poly, 2)
+	resPolys01i := make([][]ring.Poly, 2)
+	resPolys10 := make([][]ring.Poly, 2)
+	resPolys10i := make([][]ring.Poly, 2)
+	resPolys11 := make([][]ring.Poly, 2)
+	resPolys11i := make([][]ring.Poly, 2)
+	for i := range 2 {
+		resPolys00[i] = make([]ring.Poly, N)
+		resPolys00i[i] = make([]ring.Poly, N)
+		resPolys01[i] = make([]ring.Poly, N)
+		resPolys01i[i] = make([]ring.Poly, N)
+		resPolys10[i] = make([]ring.Poly, N)
+		resPolys10i[i] = make([]ring.Poly, N)
+		resPolys11[i] = make([]ring.Poly, N)
+		resPolys11i[i] = make([]ring.Poly, N)
+		for j := range N {
+			resPolys00[i][j] = ringP.NewPoly()
+			resPolys00i[i][j] = ringP.NewPoly()
+			resPolys01[i][j] = ringP.NewPoly()
+			resPolys01i[i][j] = ringP.NewPoly()
+			resPolys10[i][j] = ringP.NewPoly()
+			resPolys10i[i][j] = ringP.NewPoly()
+			resPolys11[i][j] = ringP.NewPoly()
+			resPolys11i[i][j] = ringP.NewPoly()
+		}
+	}
+	work := make([]*rlwe.Ciphertext, sparseN)
+	for i := range work {
+		work[i] = ct.CopyNew()
+	}
+	aux := make([]*rlwe.Ciphertext, sparseN)
+	for i := range aux {
+		aux[i] = ct.CopyNew()
+	}
+
+	fmt.Println("start c2s")
+	starttime = time.Now()
+	util.PrintMemUsage()
+	transpose.Transpose3(cts, params, evaluator, ringQ.AtLevel(cts[0].Level()), N, sparseN, work, aux, cts)
+	fmt.Println("mod switch start")
+
+	for i := range sparseN {
+		for d := range 2 {
+			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
+		}
+		if i < n {
+			ringQ.NTT(cts[i+n].Value[0], work[0].Value[0])
+			ringQ.NTT(cts[i+n].Value[1], work[0].Value[1])
+			evaluator.Mul(work[0], -1, work[0])
+			ringQ.INTT(work[0].Value[0], work[0].Value[0])
+			ringQ.INTT(work[0].Value[1], work[0].Value[1])
+		} else {
+			work[0] = cts[i-n]
+		}
+		for d := range 2 {
+			be.ModSwitchQtoP(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
+		}
+
+	}
+
+	fmt.Println("mod switch end")
+	fmt.Println("ppmm start")
+	inter_it = n
+	for l := range len(SFI) {
+		inter := inter_it >> CL_arr[l]
+		llen := (1 << CL_arr[l])
+		if l == 0 {
+			for t := range n / llen {
+				stpoint := (t % inter) + inter_it*int(t/inter)
+				rings_temp := make([][]ring.Poly, 2)
+				for d := range rings_temp {
+					rings_temp[d] = make([]ring.Poly, llen)
+				}
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolys[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys00[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolys[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys00i[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolysC[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys01[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolysC[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys01i[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolysC[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys10[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolysC[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys10i[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolys[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys11[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = inputPolys[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys11i[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+			}
+
+		} else if l == len(SFI)-1 {
+			for t := range n / llen {
+				stpoint := (t % inter) + inter_it*int(t/inter)
+				rings_temp := make([][]ring.Poly, 2)
+				for d := range rings_temp {
+					rings_temp[d] = make([]ring.Poly, llen)
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys00[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys00[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys00i[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys00i[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys01[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys01[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys01i[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys01i[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+			}
+			matmult.SubManyRing(ringP, resPolys00, resPolys00i, resPolys00)
+			matmult.AddManyRing(ringP, resPolys01, resPolys01i, resPolys01i)
+
+			for t := range n / llen {
+				stpoint := (t % inter) + inter_it*int(t/inter)
+				rings_temp := make([][]ring.Poly, 2)
+				for d := range rings_temp {
+					rings_temp[d] = make([]ring.Poly, llen)
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys10[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys10[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys10i[d][stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys10i[d][stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys11[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0i[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys11[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+
+				for d := range 2 {
+					for idx_ll := range llen {
+						rings_temp[d][idx_ll] = resPolys11i[d][n+stpoint+inter*idx_ll]
+					}
+				}
+				matmult.PPMM_Blas_CRT_Inplace(rings_temp, mat0[l][t], llen, llen, 2*n, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				for d := range 2 {
+					for idx_ll := range llen {
+						resPolys11i[d][n+stpoint+inter*idx_ll] = rings_temp[d][idx_ll]
+					}
+				}
+			}
+			matmult.SubManyRing(ringP, resPolys10, resPolys10i, resPolys10)
+			matmult.AddManyRing(ringP, resPolys11, resPolys11i, resPolys11i)
+
+		}
+		inter_it = inter
+	}
+	matmult.AddManyRing(ringP, resPolys00, resPolys01i, resPolys00)
+	matmult.AddManyRing(ringP, resPolys10, resPolys11i, resPolys10)
+
+	rev := matmult.BitReversePermutationMatrix(n)
+	matrev := make([]float64, len(P)*N*N)
+	for p := range len(P) {
+		for i := range N {
+			for j := range N {
+				if (i < n && j < n) || (i >= n && j >= n) {
+					matrev[p*N*N+i*N+j] = (real(rev[i%n][j%n]))
+				}
+			}
+		}
+	}
+
+	matmult.PPMM_Blas_CRT_Inplace(resPolys00, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+	matmult.PPMM_Blas_CRT_Inplace(resPolys10, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+
+	for i := range N {
+		for idx := range 2 {
+			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+		}
+		ringQ.NTT(result[i].Value[0], result[i].Value[0])
+		ringQ.NTT(result[i].Value[1], result[i].Value[1])
+		ringQ.NTT(result2[i].Value[0], result2[i].Value[0])
+		ringQ.NTT(result2[i].Value[1], result2[i].Value[1])
+
+		evaluator.Mul(result[i], 1.0/(scale), result[i])
+		evaluator.Rescale(result[i], result[i])
+		evaluator.Mul(result[i], 1.0/(scale), result[i])
+		evaluator.Rescale(result[i], result[i])
+
+		evaluator.Mul(result2[i], 1.0/(scale), result2[i])
+		evaluator.Rescale(result2[i], result2[i])
+		evaluator.Mul(result2[i], 1.0/(scale), result2[i])
+		evaluator.Rescale(result2[i], result2[i])
+
+		ringQ.AtLevel(result[i].Level()).INTT(result[i].Value[0], result[i].Value[0])
+		ringQ.AtLevel(result[i].Level()).INTT(result[i].Value[1], result[i].Value[1])
+		ringQ.AtLevel(result[i].Level()).INTT(result2[i].Value[0], result2[i].Value[0])
+		ringQ.AtLevel(result[i].Level()).INTT(result2[i].Value[1], result2[i].Value[1])
+
+		// q := rlwe.NewScale(params.Q()[result[i].Level()])
+		// util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
+		// util.Rescale_NonNTT(evaluator, result[i], result[i])
+		// util.Mul_ScaleExact(evaluator, result2[i], 1.0/(scale), result2[i], q)
+		// util.Rescale_NonNTT(evaluator, result2[i], result2[i])
+
+		// q = rlwe.NewScale(params.Q()[result[i].Level()])
+		// util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
+		// util.Rescale_NonNTT(evaluator, result[i], result[i])
+		// util.Mul_ScaleExact(evaluator, result2[i], 1.0/(scale), result2[i], q)
+		// util.Rescale_NonNTT(evaluator, result2[i], result2[i])
+	}
+	fmt.Println(result[0].Level())
+
+	transpose.Transpose3(result, params, evaluator, ringQ.AtLevel(result[0].Level()), N, sparseN, work, aux, result)
+	transpose.Transpose3(result2, params, evaluator, ringQ.AtLevel(result2[0].Level()), N, sparseN, work, aux, result2)
+	elapse = time.Since(starttime)
+	fmt.Println(elapse)
+
+	resvalue := make([]complex128, n)
+	for i := range result {
+
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+		result[i].IsBatched = true
+		dept := decryptor.DecryptNew(result[i])
+		encoder.Decode(dept, resvalue)
+
+		fmt.Println(resvalue[0:10])
+		if i > 100 {
+			break
+		}
+	}
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
+	for i := range result2 {
+
+		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[0], result2[i].Value[0])
+		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[1], result2[i].Value[1])
+		result2[i].IsBatched = true
+		dept := decryptor.DecryptNew(result2[i])
+		encoder.Decode(dept, resvalue)
+
+		fmt.Println(resvalue[0:10])
+		if i > 100 {
+			break
+		}
+	}
+	fmt.Println(result2[0].LogScale())
 
 }

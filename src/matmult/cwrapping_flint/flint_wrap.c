@@ -10,6 +10,9 @@
 #include <omp.h>   
 #include <stdio.h>
 #include <time.h>
+#include <complex.h>
+#include <string.h>
+typedef double _Complex dcomplex;
 
 
 void multiply_mod_matrix_flint(const unsigned long long *a,
@@ -149,6 +152,182 @@ void multiply_mod_matrix_blas_Inplace(const double *a,
 }
 
 
+
+void multiply_mod_matrix_blas_Inplace_Stride(const double *a,
+                         const double *b,
+                         double *result,
+                         const unsigned int  n_a,
+                         const unsigned int  n_b,
+                         const unsigned int  n_c,
+                         const unsigned int level,
+                         const unsigned int lda,const unsigned int ldb,const unsigned int ldc)
+{
+    for(int i =0;i<level;i++){
+        cblas_dgemm(
+                CblasRowMajor,   // 메모리 저장 방식 (row-major)
+                CblasNoTrans,CblasNoTrans,    // A를 전치하지 않음
+                n_a, n_c,n_b,            // 행렬 A의 크기 (m x n)
+                1,           // 스케일 값 alpha
+                &(a[i*n_a*n_b]), lda,            // 행렬 A와 leading dimension (n)
+                &(b[i*n_b*n_c]), ldb,            // 벡터 x와 stride
+                0,            // 스케일 값 beta
+                &(result[i*n_a*n_c]), ldc             // 결과 벡터 y와 stride
+        );
+    }
+}
+
+
+static inline int pow5_update(int pow5v, int m) {
+    // pow5v = (pow5v * 5) & ((m << 2) - 1)
+    return (pow5v * 5) & ((m << 2) - 1);
+}
+
+static void set_identity_colmajor(int n, double _Complex* out) {
+    // out[r + c*n]
+    memset(out, 0, (size_t)n * (size_t)n * sizeof(double _Complex));
+    for (int i = 0; i < n; i++) {
+        out[i + i*n] = 1.0 + 0.0*I;
+    }
+}
+
+static void applySFStepMatBLAS(int n, int idx, const double _Complex* roots, double _Complex* A) {
+    // A is column-major (n x n). Row r across columns is strided by n:
+    // elements: A[r + c*n], c=0..n-1
+    const int m     = 1 << (idx + 1);
+    const int halfM = m >> 1;
+    const int gap   = n / m;
+
+    double _Complex* top     = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    double _Complex* bot     = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    double _Complex* topCopy = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    if (!top || !bot || !topCopy) { free(top); free(bot); free(topCopy); return; }
+
+    for (int base = 0; base < n; base += m) {
+        int pow5v = 1;
+        for (int j = 0; j < halfM; j++) {
+            const int k = pow5v * gap;
+            const double _Complex w = roots[k];
+
+            const int rTop = base + j;
+            const int rBot = base + j + halfM;
+
+            // top = row(rTop), bot = row(rBot)
+            // row start address is &A[rTop], stride = n across columns
+            cblas_zcopy(n, (const void*)(&A[rTop]), n, (void*)top, 1);
+            cblas_zcopy(n, (const void*)(&A[rBot]), n, (void*)bot, 1);
+
+            memcpy(topCopy, top, (size_t)n * sizeof(double _Complex));
+
+            // bot = w * bot
+            cblas_zscal(n, (const void*)(&w), (void*)bot, 1);
+
+            // top = top + bot
+            {
+                const double _Complex one = 1.0 + 0.0*I;
+                cblas_zaxpy(n, (const void*)(&one), (const void*)bot, 1, (void*)top, 1);
+            }
+
+            // topCopy = topCopy - bot
+            {
+                const double _Complex minusOne = -1.0 + 0.0*I;
+                cblas_zaxpy(n, (const void*)(&minusOne), (const void*)bot, 1, (void*)topCopy, 1);
+            }
+
+            // write back
+            cblas_zcopy(n, (const void*)top, 1, (void*)(&A[rTop]), n);
+            cblas_zcopy(n, (const void*)topCopy, 1, (void*)(&A[rBot]), n);
+
+            pow5v = pow5_update(pow5v, m);
+        }
+    }
+
+    free(top);
+    free(bot);
+    free(topCopy);
+}
+
+static void applySFIStepMatBLAS(int n, int idx, const double _Complex* roots, double _Complex div, double _Complex* A) {
+    const int m     = n >> idx;
+    const int halfM = m >> 1;
+    const int gap   = n / m;
+
+    const double _Complex invDiv = 1.0 / div;
+
+    double _Complex* a    = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    double _Complex* b    = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    double _Complex* sum  = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    double _Complex* diff = (double _Complex*)malloc((size_t)n * sizeof(double _Complex));
+    if (!a || !b || !sum || !diff) { free(a); free(b); free(sum); free(diff); return; }
+
+    for (int base = 0; base < n; base += m) {
+        int pow5v = 1;
+        for (int j = 0; j < halfM; j++) {
+            const int k = pow5v * gap;
+            const double _Complex wInv = conj(roots[k]);
+
+            const int rTop = base + j;
+            const int rBot = base + j + halfM;
+
+            cblas_zcopy(n, (const void*)(&A[rTop]), n, (void*)a, 1);
+            cblas_zcopy(n, (const void*)(&A[rBot]), n, (void*)b, 1);
+
+            memcpy(sum, a, (size_t)n * sizeof(double _Complex));
+            memcpy(diff, a, (size_t)n * sizeof(double _Complex));
+
+            // sum = a + b
+            {
+                const double _Complex one = 1.0 + 0.0*I;
+                cblas_zaxpy(n, (const void*)(&one), (const void*)b, 1, (void*)sum, 1);
+            }
+            // diff = a - b
+            {
+                const double _Complex minusOne = -1.0 + 0.0*I;
+                cblas_zaxpy(n, (const void*)(&minusOne), (const void*)b, 1, (void*)diff, 1);
+            }
+
+            // sum = sum/div
+            cblas_zscal(n, (const void*)(&invDiv), (void*)sum, 1);
+
+            // diff = (wInv/div) * diff
+            {
+                const double _Complex alpha = wInv * invDiv;
+                cblas_zscal(n, (const void*)(&alpha), (void*)diff, 1);
+            }
+
+            cblas_zcopy(n, (const void*)sum, 1, (void*)(&A[rTop]), n);
+            cblas_zcopy(n, (const void*)diff, 1, (void*)(&A[rBot]), n);
+
+            pow5v = pow5_update(pow5v, m);
+        }
+    }
+
+    free(a);
+    free(b);
+    free(sum);
+    free(diff);
+}
+
+void computeCombinedMat_blas(
+    int n,
+    int startIdx,
+    int count,
+    const dcomplex* roots,
+    dcomplex div,
+    int isInverse,
+    dcomplex* out
+) {
+    set_identity_colmajor(n, out);
+
+    if (isInverse) {
+        for (int l = 0; l < count; l++) {
+            applySFIStepMatBLAS(n, startIdx + l, roots, div, out);
+        }
+    } else {
+        for (int l = 0; l < count; l++) {
+            applySFStepMatBLAS(n, startIdx + l, roots, out);
+        }
+    }
+}
 
 void mul64(unsigned long long x, unsigned long long y, unsigned long long *hi) {
 	const unsigned long long mask32 = 1<<32 - 1;

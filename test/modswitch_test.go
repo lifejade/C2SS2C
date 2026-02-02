@@ -2,13 +2,13 @@ package test
 
 import (
 	"fmt"
-	"math/big"
 	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/lifejade/mm/src/matmult"
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
@@ -327,8 +327,8 @@ func Test_ModSwitchTime(t *testing.T) {
 	}
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
-	Mul_(evaluator, ctIn, 1/scale, ctIn)
-	Rescale_NonNTT(evaluator, ctIn, ctIn)
+	util.Mul_(evaluator, ctIn, 1/scale, ctIn)
+	util.Rescale_NonNTT(evaluator, ctIn, ctIn)
 
 	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[0], ctIn.Value[0])
 	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[1], ctIn.Value[1])
@@ -470,8 +470,8 @@ func Test_ModSwitchTime2(t *testing.T) {
 	}
 	sc := rlwe.NewScale(ringQ.ModuliChain()[2])
 
-	Mul2_(evaluator, ctIn, 1/scale, ctIn, sc)
-	Rescale_NonNTT(evaluator, ctIn, ctIn)
+	util.Mul_ScaleExact(evaluator, ctIn, 1/scale, ctIn, sc)
+	util.Rescale_NonNTT(evaluator, ctIn, ctIn)
 
 	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[0], ctIn.Value[0])
 	ringQ.AtLevel(ctIn.Level()).NTT(ctIn.Value[1], ctIn.Value[1])
@@ -637,8 +637,8 @@ func Test_ModSwitch2(t *testing.T) {
 			fmt.Println("modswitch2", elapse_)
 		}
 		for i := range size {
-			Mul_(evaluator, cts[i], 1/scale, cts[i])
-			Rescale_NonNTT(evaluator, cts[i], cts[i])
+			util.Mul_(evaluator, cts[i], 1/scale, cts[i])
+			util.Rescale_NonNTT(evaluator, cts[i], cts[i])
 		}
 		elapse = time.Since(starttime)
 		fmt.Println(elapse)
@@ -808,7 +808,7 @@ func Test_ModSwitch_Opt(t *testing.T) {
 				if step == levelstep-1 {
 					time_ = time.Now()
 					for i := range size {
-						be.ModUpPtoQ2(PLevel, startLevel, rings[idx][i], cts[i].Value[idx])
+						be.ModUpPtoQ(PLevel, startLevel, rings[idx][i], cts[i].Value[idx])
 					}
 					elapse_ = time.Since(time_)
 					fmt.Println("modswitch2", elapse_)
@@ -1011,7 +1011,7 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 				for idx := range 2 {
 					for i := range size {
 						_ = i
-						be.ModUpPtoQ2(PLevel, startLevel, rings[idx][i], ct.Value[idx])
+						be.ModUpPtoQ(PLevel, startLevel, rings[idx][i], ct.Value[idx])
 					}
 				}
 				elapse_ = time.Since(time_)
@@ -1049,11 +1049,11 @@ func Test_ModSwitch_Opt2(t *testing.T) {
 		// ringQ.NTT(ct.Value[0], ct.Value[0])
 		// ringQ.NTT(ct.Value[1], ct.Value[1])
 
-		Mul2_(evaluator, ct, 1/(sscale), ct, sc)
+		util.Mul_ScaleExact(evaluator, ct, 1/(sscale), ct, sc)
 		//evaluator.Mul2(ct, 1/(scale*scale*scale), ct, sc)
 		//ct.Scale = sc
 		//fmt.Println(ct.LogScale())
-		Rescale_NonNTT(evaluator, ct, ct)
+		util.Rescale_NonNTT(evaluator, ct, ct)
 		elapse_ := time.Since(time_)
 		fmt.Println("rescale (have to mult degree times)", elapse_)
 		fmt.Println("rescale", elapse_*(1<<16))
@@ -1283,11 +1283,11 @@ func Test_ModSwitch_Opt3(t *testing.T) {
 		// ringQ.NTT(ct.Value[0], ct.Value[0])
 		// ringQ.NTT(ct.Value[1], ct.Value[1])
 
-		Mul2_(evaluator, ct, 1/(sscale), ct, sc)
+		util.Mul_ScaleExact(evaluator, ct, 1/(sscale), ct, sc)
 		//evaluator.Mul2(ct, 1/(scale*scale*scale), ct, sc)
 		//ct.Scale = sc
 		//fmt.Println(ct.LogScale())
-		Rescale_NonNTT(evaluator, ct, ct)
+		util.Rescale_NonNTT(evaluator, ct, ct)
 		elapse_ := time.Since(time_)
 		fmt.Println("rescale (have to mult degree times)", elapse_)
 		fmt.Println("rescale", elapse_*(1<<16))
@@ -1525,11 +1525,11 @@ func Test_ModSwitch_Opt4(t *testing.T) {
 		// ringQ.NTT(ct.Value[0], ct.Value[0])
 		// ringQ.NTT(ct.Value[1], ct.Value[1])
 
-		Mul2_(evaluator, ct, 1/(sscale), ct, sc)
+		util.Mul_ScaleExact(evaluator, ct, 1/(sscale), ct, sc)
 		//evaluator.Mul2(ct, 1/(scale*scale*scale), ct, sc)
 		//ct.Scale = sc
 		//fmt.Println(ct.LogScale())
-		Rescale_NonNTT(evaluator, ct, ct)
+		util.Rescale_NonNTT(evaluator, ct, ct)
 		elapse_ := time.Since(time_)
 		fmt.Println("rescale (have to mult degree times)", elapse_)
 		fmt.Println("rescale", elapse_*(1<<16))
@@ -1546,168 +1546,4 @@ func Test_ModSwitch_Opt4(t *testing.T) {
 		fmt.Println(values)
 		fmt.Println("//////////////////////////////////////////////////////////////")
 	}
-}
-
-func Mul2_(eval *hefloat.Evaluator, op0 *rlwe.Ciphertext, op1 float64, opOut *rlwe.Ciphertext, scale rlwe.Scale) (err error) {
-
-	_, level, err := eval.InitOutputUnaryOp(op0.El(), opOut.El())
-	if err != nil {
-		return fmt.Errorf("cannot Mul: %w", err)
-	}
-
-	opOut.Resize(op0.Degree(), level)
-
-	// Gets the ring at the target level
-	ringQ := eval.GetParameters().RingQ().AtLevel(level)
-
-	// Convertes the *bignum.Complex to a complex RNS scalar
-	RNSReal := bigFloatToRNSScalar(ringQ, &scale.Value, op1)
-	// fmt.Println(RNSReal)
-	// for i, s := range eval.GetParameters().RingQ().SubRings[:level+1] {
-	// 	RNSImag[i] = ring.MRed(RNSImag[i], s.RootsForward[1], s.Modulus, s.MRedConstant)
-	// 	RNSReal[i], RNSImag[i] = ring.CRed(RNSReal[i]+RNSImag[i], s.Modulus), ring.CRed(RNSReal[i]+s.Modulus-RNSImag[i], s.Modulus)
-	// }
-	// fmt.Println(RNSReal)
-	// fmt.Println(RNSImag)
-	for i, s := range ringQ.SubRings[:level+1] {
-		RNSReal[i] = ring.MForm(RNSReal[i], s.Modulus, s.BRedConstant)
-	}
-	for i := range op0.Value {
-
-		//ringQ.MulDoubleRNSScalar(op0.Value[i], RNSReal, RNSImag, opOut.Value[i])
-		ringQ.MulRNSScalarMontgomery(op0.Value[i], RNSReal, opOut.Value[i])
-	}
-
-	// Copies the metadata on the output
-	opOut.Scale = op0.Scale.Mul(scale) // updates the scaling factor
-
-	return nil
-}
-
-func Mul_(eval *hefloat.Evaluator, op0 *rlwe.Ciphertext, op1 float64, opOut *rlwe.Ciphertext) (err error) {
-
-	_, level, err := eval.InitOutputUnaryOp(op0.El(), opOut.El())
-	if err != nil {
-		return fmt.Errorf("cannot Mul: %w", err)
-	}
-
-	opOut.Resize(op0.Degree(), level)
-
-	// Gets the ring at the target level
-	ringQ := eval.GetParameters().RingQ().AtLevel(level)
-
-	var scale rlwe.Scale
-	scale = rlwe.NewScale(ringQ.SubRings[level].Modulus) // Current modulus scaling factor
-
-	// If DefaultScalingFactor > 2^60, then multiple moduli are used per single rescale
-	// thus continues multiplying the scale with the appropriate number of moduli
-	for i := 1; i < eval.GetParameters().LevelsConsumedPerRescaling(); i++ {
-		scale = scale.Mul(rlwe.NewScale(ringQ.SubRings[level-i].Modulus))
-	}
-
-	// Convertes the *bignum.Complex to a complex RNS scalar
-	RNSReal := bigFloatToRNSScalar(ringQ, &scale.Value, op1)
-	// fmt.Println(RNSReal)
-	// for i, s := range eval.GetParameters().RingQ().SubRings[:level+1] {
-	// 	RNSImag[i] = ring.MRed(RNSImag[i], s.RootsForward[1], s.Modulus, s.MRedConstant)
-	// 	RNSReal[i], RNSImag[i] = ring.CRed(RNSReal[i]+RNSImag[i], s.Modulus), ring.CRed(RNSReal[i]+s.Modulus-RNSImag[i], s.Modulus)
-	// }
-	// fmt.Println(RNSReal)
-	// fmt.Println(RNSImag)
-	for i, s := range ringQ.SubRings[:level+1] {
-		RNSReal[i] = ring.MForm(RNSReal[i], s.Modulus, s.BRedConstant)
-	}
-	for i := range op0.Value {
-
-		//ringQ.MulDoubleRNSScalar(op0.Value[i], RNSReal, RNSImag, opOut.Value[i])
-		ringQ.MulRNSScalarMontgomery(op0.Value[i], RNSReal, opOut.Value[i])
-	}
-
-	// Copies the metadata on the output
-	opOut.Scale = op0.Scale.Mul(scale) // updates the scaling factor
-
-	return nil
-}
-
-func bigFloatToRNSScalar(r *ring.Ring, scale *big.Float, value float64) (RNSReal ring.RNSScalar) {
-
-	if scale == nil {
-		scale = new(big.Float).SetFloat64(1)
-	}
-
-	real := new(big.Int)
-	v := big.NewFloat(value)
-	res := new(big.Float).Mul(v, scale)
-
-	if cmp := v.Cmp(new(big.Float)); cmp > 0 {
-		res.Add(res, new(big.Float).SetFloat64(0.5))
-	} else if cmp < 0 {
-		res.Sub(res, new(big.Float).SetFloat64(0.5))
-	}
-
-	res.Int(real)
-
-	return r.NewRNSScalarFromBigint(real)
-}
-
-func Rescale_NonNTT(eval *hefloat.Evaluator, op0, opOut *rlwe.Ciphertext) (err error) {
-
-	if op0.MetaData == nil || opOut.MetaData == nil {
-		return fmt.Errorf("cannot RescaleTo: op0.MetaData or opOut.MetaData is nil")
-	}
-	minScale := eval.GetParameters().DefaultScale()
-
-	if minScale.Cmp(rlwe.NewScale(0)) != 1 {
-		return fmt.Errorf("cannot RescaleTo: minScale is <0")
-	}
-
-	minScale = minScale.Div(rlwe.NewScale(2))
-
-	if op0.Scale.Cmp(rlwe.NewScale(0)) != 1 {
-		return fmt.Errorf("cannot RescaleTo: ciphertext scale is <0")
-	}
-
-	if op0.Level() == 0 {
-		return fmt.Errorf("cannot RescaleTo: input Ciphertext already at level 0")
-	}
-
-	*opOut.MetaData = *op0.MetaData
-
-	newLevel := op0.Level()
-
-	ringQ := eval.GetParameters().RingQ().AtLevel(op0.Level())
-
-	// Divides the scale by each moduli of the modulus chain as long as the scale isn't smaller than minScale/2
-	// or until the output Level() would be zero
-	var nbRescales int
-	for newLevel >= 0 {
-
-		scale := opOut.Scale.Div(rlwe.NewScale(ringQ.SubRings[newLevel].Modulus))
-
-		if scale.Cmp(minScale) == -1 {
-			break
-		}
-
-		opOut.Scale = scale
-
-		nbRescales++
-		newLevel--
-	}
-
-	if op0 != opOut {
-		opOut.Resize(op0.Degree(), op0.Level()-nbRescales)
-	}
-
-	if nbRescales > 0 {
-		for i := range opOut.Value {
-			ringQ.DivRoundByLastModulusMany(nbRescales, op0.Value[i], eval.BuffQ()[0], opOut.Value[i])
-		}
-		opOut.Resize(opOut.Degree(), newLevel)
-	} else {
-		if op0 != opOut {
-			opOut.Copy(op0)
-		}
-	}
-
-	return nil
 }

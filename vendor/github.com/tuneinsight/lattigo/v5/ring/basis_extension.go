@@ -215,20 +215,6 @@ func (be *BasisExtender) ModUpPtoQ(levelP, levelQ int, polP, polQ Poly) {
 	ringQ.SubScalarBigint(polQ, PHalf, polQ)
 }
 
-func (be *BasisExtender) ModUpPtoQ2(levelP, levelQ int, polP, polQ Poly) {
-
-	ringQ := be.ringQ.AtLevel(levelQ)
-	ringP := be.ringP.AtLevel(levelP)
-	buffP := be.buffP
-
-	PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
-	PHalf.Rsh(PHalf, 1)
-
-	ringP.AddScalarBigint(polP, PHalf, buffP)
-	ModUpExact2(buffP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.constantsPtoQ[levelP])
-	ringQ.SubScalarBigint(polQ, PHalf, polQ)
-}
-
 // ModDownQPtoQ reduces the basis of a polynomial.
 // Given a polynomial with coefficients in basis {Q0,Q1....Qlevel} and {P0,P1...Pj},
 // it reduces its basis from {Q0,Q1....Qlevel} and {P0,P1...Pj} to {Q0,Q1....Qlevel}
@@ -316,34 +302,6 @@ func ModUpExact(p1, p2 [][]uint64, ringQ, ringP *Ring, MUC ModUpConstants) {
 		for j := 0; j < levelP+1; j++ {
 			/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2[j])%8 != 0*/
 			multSum(levelQ, (*[8]uint64)(unsafe.Pointer(&p2[j][x])), &rlo, &rhi, &v, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, P[j], mredP[j], vtimesqmodp[j], qoverqimodp[j])
-		}
-	}
-}
-
-func ModUpExact2(p1, p2 [][]uint64, ringQ, ringP *Ring, MUC ModUpConstants) {
-
-	var v, rlo, rhi [8]uint64
-	var y0, y1, y2, y3, y4, y5, y6, y7 [64]uint64
-
-	levelQ := len(p1) - 1
-	levelP := len(p2) - 1
-
-	Q := ringQ.ModuliChain()
-	mredQ := ringQ.MRedConstants()
-
-	P := ringP.ModuliChain()
-	mredP := ringP.MRedConstants()
-
-	vtimesqmodp := MUC.vtimesqmodp
-	qoverqiinvqi := MUC.qoverqiinvqi
-	qoverqimodp := MUC.qoverqimodp
-
-	// We loop over each coefficient and apply the basis extension
-	for x := 0; x < len(p1[0]); x = x + 8 {
-		reconstructRNS2(0, levelQ+1, x, p1, &v, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, Q, mredQ, qoverqiinvqi)
-		for j := 0; j < levelP+1; j++ {
-			/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2[j])%8 != 0*/
-			multSum2(levelQ, (*[8]uint64)(unsafe.Pointer(&p2[j][x])), &rlo, &rhi, &v, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, P[j], mredP[j], vtimesqmodp[j], qoverqimodp[j])
 		}
 	}
 }
@@ -595,51 +553,7 @@ func reconstructRNS(start, end, x int, p [][]uint64, v *[8]uint64, y0, y1, y2, y
 	var qif float64
 
 	for i, j := start, 0; i < end; i, j = i+1, j+1 {
-		qoverqiinvqi = QbMont[i]
-		qi = Q[i]
-		qiInv = QInv[i]
-		qif = float64(qi)
 
-		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p[i])%8 != 0 */
-		pTmp := (*[8]uint64)(unsafe.Pointer(&p[i][x]))
-
-		y0[j] = MRed(pTmp[0], qoverqiinvqi, qi, qiInv)
-		y1[j] = MRed(pTmp[1], qoverqiinvqi, qi, qiInv)
-		y2[j] = MRed(pTmp[2], qoverqiinvqi, qi, qiInv)
-		y3[j] = MRed(pTmp[3], qoverqiinvqi, qi, qiInv)
-		y4[j] = MRed(pTmp[4], qoverqiinvqi, qi, qiInv)
-		y5[j] = MRed(pTmp[5], qoverqiinvqi, qi, qiInv)
-		y6[j] = MRed(pTmp[6], qoverqiinvqi, qi, qiInv)
-		y7[j] = MRed(pTmp[7], qoverqiinvqi, qi, qiInv)
-
-		// Computation of the correction term v * Q%pi
-		vi[0] += float64(y0[j]) / qif
-		vi[1] += float64(y1[j]) / qif
-		vi[2] += float64(y2[j]) / qif
-		vi[3] += float64(y3[j]) / qif
-		vi[4] += float64(y4[j]) / qif
-		vi[5] += float64(y5[j]) / qif
-		vi[6] += float64(y6[j]) / qif
-		vi[7] += float64(y7[j]) / qif
-	}
-
-	v[0] = uint64(vi[0])
-	v[1] = uint64(vi[1])
-	v[2] = uint64(vi[2])
-	v[3] = uint64(vi[3])
-	v[4] = uint64(vi[4])
-	v[5] = uint64(vi[5])
-	v[6] = uint64(vi[6])
-	v[7] = uint64(vi[7])
-}
-
-func reconstructRNS2(start, end, x int, p [][]uint64, v *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, Q, QInv, QbMont []uint64) {
-
-	var vi [8]float64
-	var qi, qiInv, qoverqiinvqi uint64
-	var qif float64
-
-	for i, j := start, 0; i < end; i, j = i+1, j+1 {
 		qoverqiinvqi = QbMont[i]
 		qi = Q[i]
 		qiInv = QInv[i]
@@ -680,85 +594,6 @@ func reconstructRNS2(start, end, x int, p [][]uint64, v *[8]uint64, y0, y1, y2, 
 
 // Caution, returns the values in [0, 2q-1]
 func multSum(level int, res, rlo, rhi, v *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[32]uint64, q, qInv uint64, vtimesqmodp, qoverqimodp []uint64) {
-
-	var mhi, mlo, c, hhi, qqip uint64
-
-	qqip = qoverqimodp[0]
-
-	rhi[0], rlo[0] = bits.Mul64(y0[0], qqip)
-	rhi[1], rlo[1] = bits.Mul64(y1[0], qqip)
-	rhi[2], rlo[2] = bits.Mul64(y2[0], qqip)
-	rhi[3], rlo[3] = bits.Mul64(y3[0], qqip)
-	rhi[4], rlo[4] = bits.Mul64(y4[0], qqip)
-	rhi[5], rlo[5] = bits.Mul64(y5[0], qqip)
-	rhi[6], rlo[6] = bits.Mul64(y6[0], qqip)
-	rhi[7], rlo[7] = bits.Mul64(y7[0], qqip)
-
-	// Accumulates the sum on uint128 and does a lazy montgomery reduction at the end
-	for i := 1; i < level+1; i++ {
-
-		qqip = qoverqimodp[i]
-
-		mhi, mlo = bits.Mul64(y0[i], qqip)
-		rlo[0], c = bits.Add64(rlo[0], mlo, 0)
-		rhi[0] += mhi + c
-
-		mhi, mlo = bits.Mul64(y1[i], qqip)
-		rlo[1], c = bits.Add64(rlo[1], mlo, 0)
-		rhi[1] += mhi + c
-
-		mhi, mlo = bits.Mul64(y2[i], qqip)
-		rlo[2], c = bits.Add64(rlo[2], mlo, 0)
-		rhi[2] += mhi + c
-
-		mhi, mlo = bits.Mul64(y3[i], qqip)
-		rlo[3], c = bits.Add64(rlo[3], mlo, 0)
-		rhi[3] += mhi + c
-
-		mhi, mlo = bits.Mul64(y4[i], qqip)
-		rlo[4], c = bits.Add64(rlo[4], mlo, 0)
-		rhi[4] += mhi + c
-
-		mhi, mlo = bits.Mul64(y5[i], qqip)
-		rlo[5], c = bits.Add64(rlo[5], mlo, 0)
-		rhi[5] += mhi + c
-
-		mhi, mlo = bits.Mul64(y6[i], qqip)
-		rlo[6], c = bits.Add64(rlo[6], mlo, 0)
-		rhi[6] += mhi + c
-
-		mhi, mlo = bits.Mul64(y7[i], qqip)
-		rlo[7], c = bits.Add64(rlo[7], mlo, 0)
-		rhi[7] += mhi + c
-	}
-
-	hhi, _ = bits.Mul64(rlo[0]*qInv, q)
-	res[0] = rhi[0] - hhi + q + vtimesqmodp[v[0]]
-
-	hhi, _ = bits.Mul64(rlo[1]*qInv, q)
-	res[1] = rhi[1] - hhi + q + vtimesqmodp[v[1]]
-
-	hhi, _ = bits.Mul64(rlo[2]*qInv, q)
-	res[2] = rhi[2] - hhi + q + vtimesqmodp[v[2]]
-
-	hhi, _ = bits.Mul64(rlo[3]*qInv, q)
-	res[3] = rhi[3] - hhi + q + vtimesqmodp[v[3]]
-
-	hhi, _ = bits.Mul64(rlo[4]*qInv, q)
-	res[4] = rhi[4] - hhi + q + vtimesqmodp[v[4]]
-
-	hhi, _ = bits.Mul64(rlo[5]*qInv, q)
-	res[5] = rhi[5] - hhi + q + vtimesqmodp[v[5]]
-
-	hhi, _ = bits.Mul64(rlo[6]*qInv, q)
-	res[6] = rhi[6] - hhi + q + vtimesqmodp[v[6]]
-
-	hhi, _ = bits.Mul64(rlo[7]*qInv, q)
-	res[7] = rhi[7] - hhi + q + vtimesqmodp[v[7]]
-}
-
-// Caution, returns the values in [0, 2q-1]
-func multSum2(level int, res, rlo, rhi, v *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, q, qInv uint64, vtimesqmodp, qoverqimodp []uint64) {
 
 	var mhi, mlo, c, hhi, qqip uint64
 
