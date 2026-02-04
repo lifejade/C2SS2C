@@ -5,10 +5,15 @@ import (
 	"io"
 	"unsafe"
 
+	"github.com/tuneinsight/lattigo/v5/ring"
 	"github.com/tuneinsight/lattigo/v5/utils"
 	"github.com/tuneinsight/lattigo/v5/utils/buffer"
 	"github.com/tuneinsight/lattigo/v5/utils/structs"
 )
+
+func NewPoly(r *ring.Ring) Poly {
+	return newPoly(r.N(), r.Level())
+}
 
 // Poly is the structure that contains the coefficients of a polynomial.
 type Poly struct {
@@ -16,7 +21,7 @@ type Poly struct {
 }
 
 // NewPoly creates a new polynomial with N coefficients set to zero and Level+1 moduli.
-func NewPoly(N, Level int) (pol Poly) {
+func newPoly(N, Level int) (pol Poly) {
 	Coeffs := make([][]uint32, Level+1)
 	for i := range Coeffs {
 		Coeffs[i] = make([]uint32, N)
@@ -178,4 +183,60 @@ func (pol Poly) MarshalBinary() (p []byte, err error) {
 func (pol *Poly) UnmarshalBinary(p []byte) (err error) {
 	_, err = pol.ReadFrom(buffer.NewBuffer(p))
 	return
+}
+
+func addvec(p1, p2, p3 []uint32, modulus uint32) {
+
+	N := len(p1)
+
+	for j := 0; j < N; j = j + 8 {
+
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p1)%8 */
+		x := (*[8]uint32)(unsafe.Pointer(&p1[j]))
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2)%8 */
+		y := (*[8]uint32)(unsafe.Pointer(&p2[j]))
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p3)%8 */
+		z := (*[8]uint32)(unsafe.Pointer(&p3[j]))
+
+		z[0] = CRed(x[0]+y[0], modulus)
+		z[1] = CRed(x[1]+y[1], modulus)
+		z[2] = CRed(x[2]+y[2], modulus)
+		z[3] = CRed(x[3]+y[3], modulus)
+		z[4] = CRed(x[4]+y[4], modulus)
+		z[5] = CRed(x[5]+y[5], modulus)
+		z[6] = CRed(x[6]+y[6], modulus)
+		z[7] = CRed(x[7]+y[7], modulus)
+	}
+}
+
+func subvec(p1, p2, p3 []uint32, modulus uint32) {
+
+	N := len(p1)
+
+	for j := 0; j < N; j = j + 8 {
+
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p1)%8 */
+		x := (*[8]uint32)(unsafe.Pointer(&p1[j]))
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2)%8 */
+		y := (*[8]uint32)(unsafe.Pointer(&p2[j]))
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p3)%8 */
+		z := (*[8]uint32)(unsafe.Pointer(&p3[j]))
+
+		z[0] = CRed((x[0]+modulus)-y[0], modulus)
+		z[1] = CRed((x[1]+modulus)-y[1], modulus)
+		z[2] = CRed((x[2]+modulus)-y[2], modulus)
+		z[3] = CRed((x[3]+modulus)-y[3], modulus)
+		z[4] = CRed((x[4]+modulus)-y[4], modulus)
+		z[5] = CRed((x[5]+modulus)-y[5], modulus)
+		z[6] = CRed((x[6]+modulus)-y[6], modulus)
+		z[7] = CRed((x[7]+modulus)-y[7], modulus)
+	}
+}
+
+// CRed reduce returns a mod q where a is between 0 and 2*q-1.
+func CRed(a, q uint32) uint32 {
+	if a >= q {
+		return a - q
+	}
+	return a
 }

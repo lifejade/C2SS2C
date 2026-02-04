@@ -891,43 +891,70 @@ func PPMM_Blas_CRT_Stride(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint
 	}
 }
 
-func PPMM_Blas_CRT_Stride2(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride, level, degree int, ringP *ring.Ring, res [][]ring.Poly, buffer1, buffer2 []float64) {
+func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride, level int, ringP *ring.Ring, res []Poly, buffer1, buffer2 []float64) {
 	P := ringP.ModuliChain()
 	_ = P
 	level = level + 1
-	for d := range degree {
-		index := 0
-		for i := range level {
-			for j := range n_b {
-				idx := stpoint + j*stride
-				coeff := cts[d][idx].Coeffs[i]
-				for k := range n_c {
-					buffer1[index] = float64(coeff[k])
-					index++
-				}
-			}
-		}
-		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
-
-		index = 0
-		for i := range level {
-			p := int64(P[i])
-			for j := range n_b {
-				idx := endpoint + j*stride
-				coeff := res[d][idx].Coeffs[i]
-				for k := range n_c {
-					val := int64(buffer2[index]) % p
-					if val < 0 {
-						coeff[k] = uint64(val + p)
-					} else {
-						coeff[k] = uint64(val)
-					}
-					index++
-
-				}
+	index := 0
+	for i := range level {
+		for j := range n_b {
+			idx := stpoint + j*stride
+			coeff := cts[idx].Coeffs[i]
+			for k := range n_c {
+				buffer1[index] = float64(coeff[k])
+				index++
 			}
 		}
 	}
+	cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+
+	index = 0
+	for i := range level {
+		p := int64(P[i])
+		for j := range n_b {
+			idx := endpoint + j*stride
+			coeff := res[idx].Coeffs[i]
+			for k := range n_c {
+				val := int64(buffer2[index]) % p
+				if val < 0 {
+					coeff[k] = uint32(val + p)
+				} else {
+					coeff[k] = uint32(val)
+				}
+				index++
+
+			}
+		}
+	}
+}
+
+func PPMM_Blas_CRT_Stride_LowMem(input []uint32, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride int, p int64, res []uint32, buffer1, buffer2 []float64) {
+	// P := ringP.ModuliChain()
+	// _ = P
+	index := 0
+	for j := range n_b {
+		idx := stpoint + j*stride
+		for k := range n_c {
+			buffer1[index] = float64(input[idx*n_c+k])
+			index++
+		}
+	}
+	cwrappingflint.Mult_mod_mat_Blas_Inplace2(u, buffer1, buffer2, n_a, n_b, n_c)
+
+	index = 0
+	for j := range n_b {
+		idx := endpoint + j*stride
+		for k := range n_c {
+			val := int64(buffer2[index]) % p
+			if val < 0 {
+				res[idx*n_c+k] = uint32(val + p)
+			} else {
+				res[idx*n_c+k] = uint32(val)
+			}
+			index++
+		}
+	}
+
 }
 
 func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n_a, n_b, n_c, level int, bred []uint64, ringP *ring.Ring, result []ring.Poly) {
@@ -971,21 +998,35 @@ func SubManyRing(r *ring.Ring, p1, p2, p3 [][]ring.Poly) {
 	}
 }
 
-func AddManyRingIdx(r *ring.Ring, p1, p2, p3 [][]ring.Poly, stpIdx int) {
-	l := len(p3[0])
-	for d := range p3 {
-		for j := stpIdx; j < l; j++ {
-			r.Add(p1[d][j], p2[d][j-stpIdx], p3[d][j])
+func AddManyRingIdx(r *ring.Ring, p1, p2, p3 []Poly, stpIdx int) {
+	l := len(p2)
+	for j := stpIdx; j < stpIdx+l; j++ {
+		for i, s := range r.SubRings[:r.Level()+1] {
+			addvec(p1[j].Coeffs[i], p2[j-stpIdx].Coeffs[i], p3[j].Coeffs[i], uint32(s.Modulus))
 		}
 	}
 }
 
-func SubManyRingIdx(r *ring.Ring, p1, p2, p3 [][]ring.Poly, stpIdx int) {
-	l := len(p3[0])
-	for d := range p3 {
-		for j := stpIdx; j < l; j++ {
-			r.Sub(p1[d][j], p2[d][j-stpIdx], p3[d][j])
+func SubManyRingIdx(r *ring.Ring, p1, p2, p3 []Poly, stpIdx int) {
+	l := len(p2)
+	for j := stpIdx; j < stpIdx+l; j++ {
+		for i, s := range r.SubRings[:r.Level()+1] {
+			subvec(p1[j].Coeffs[i], p2[j-stpIdx].Coeffs[i], p3[j].Coeffs[i], uint32(s.Modulus))
 		}
+	}
+}
+
+func AddManyRingIdx_LowMem(p1, p2, p3 []uint32, stpIdx, inter int, P uint32) {
+	l := len(p2)
+	for j := stpIdx; j < stpIdx+l; j++ {
+		addvec(p1[j:], p2, p3[j:], P)
+	}
+}
+
+func SubManyRingIdx_LowMem(p1, p2, p3 []uint32, stpIdx, inter int, P uint32) {
+	l := len(p2)
+	for j := stpIdx; j < stpIdx+l; j++ {
+		subvec(p1[j:], p2, p3[j:], P)
 	}
 }
 

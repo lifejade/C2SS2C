@@ -44,6 +44,13 @@ void multiply_mod_matrix_blas_Inplace(const double *a,
                          const unsigned int  n_c,
                          const unsigned int level);
 
+void multiply_mod_matrix_blas_Inplace2(const double *a,
+                         const double *b,
+                         double *result,
+                         const unsigned int  n_a,
+                         const unsigned int  n_b,
+                         const unsigned int  n_c);
+
 void multiply_mod_matrix_blas_Inplace_Stride(const double *a,
                          const double *b,
                          double *result,

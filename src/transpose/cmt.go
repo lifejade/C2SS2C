@@ -318,17 +318,7 @@ func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 }
 
 func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, N, sparseN int, work, aux, res []*rlwe.Ciphertext) {
-	// if inputs[0].Level() != work[0].Level() {
-	// 	for i := range work {
-	// 		work[i].Resize(1, inputs[0].Level())
-	// 	}
-	// }
-	// if inputs[0].Level() != aux[0].Level() {
-	// 	for i := range aux {
-	// 		aux[i].Resize(1, inputs[0].Level())
-	// 	}
-	// }
-
+	var elapseThis time.Duration
 	ratio := N / sparseN
 	idxarr := make([]uint64, sparseN)
 
@@ -354,7 +344,7 @@ func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval
 				panic(err)
 			}
 			elapse := time.Since(util.Debug.StartTime)
-			util.Debug.AccTime += elapse
+			elapseThis += elapse
 			galEl := uint64((2*i + 1))
 			kgen_ := rlwe.NewKeyGenerator(params)
 			// gk := kgen_.GenGaloisKeyNew(galEl, sk)
@@ -379,7 +369,12 @@ func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval
 		}
 		res[(sparseN-idx)%(sparseN)] = aux[idx].CopyNew()
 	}
-
+	if util.Debug.IsDebug {
+		elapse := time.Since(util.Debug.StartTime)
+		elapseThis += elapse
+		util.Debug.AccTime += elapseThis
+		util.Debug.StartTime = time.Now()
+	}
 }
 
 func Automorphism(eval *hefloat.Evaluator, ringQ *ring.Ring, ctIn *rlwe.Ciphertext, galEl uint64, evk *rlwe.GaloisKey, opOut *rlwe.Ciphertext) {
@@ -472,6 +467,7 @@ func Tweak4(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 	logn := bits.Len(uint(n)) - 1
 	maxPowl := n / 2
 	tempBuf := work[workOff : workOff+maxPowl]
+	N := (params.MaxSlots() * 2)
 
 	for l := 0; l < logn; l++ {
 		powl := 1 << l
@@ -484,7 +480,7 @@ func Tweak4(cts []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Eva
 		Tweak4(temp, params, eval, ringQ, powl, work, workOff+powl, out, outOff+powl)
 		res := out[outOff : outOff+n]
 
-		step := (params.MaxSlots() * 2) / powl
+		step := N / powl
 
 		for j := 0; j < powl; j++ {
 			work[len(work)-1].Copy(res[powl+j])

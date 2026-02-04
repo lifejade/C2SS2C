@@ -1110,8 +1110,8 @@ func Test_imsadprof1022(t *testing.T) {
 	var totaltime time.Duration
 
 	starttime = time.Now()
-	be.ModSwitchQtoP(0, PLevel, ct.Value[0], ringiters[0])
-	be.ModSwitchQtoP(0, PLevel, ct.Value[1], ringiters[1])
+	be.ModSwitchQtoP_Old(0, PLevel, ct.Value[0], ringiters[0])
+	be.ModSwitchQtoP_Old(0, PLevel, ct.Value[1], ringiters[1])
 	elapse = time.Since(starttime)
 	fmt.Println("Q to P time: ", math.Round(((elapse*(1<<16)).Seconds())*100)/100)
 	totaltime += elapse * (1 << 16)
@@ -1179,8 +1179,8 @@ func Test_imsadprof1022(t *testing.T) {
 	}
 	ct.Resize(1, 14)
 	time_ := time.Now()
-	be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
-	be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
+	be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
+	be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
 	elapse_ := time.Since(time_)
 	fmt.Println("P to Q time: ", math.Round(((elapse_*(1<<16)).Seconds())*100)/100)
 	totaltime += elapse_ * (1 << 16)
@@ -1313,8 +1313,8 @@ func Test_CheckTimePCMMSparse(t *testing.T) {
 		var totaltime time.Duration
 		sparseN := 1 << s
 		starttime = time.Now()
-		be.ModSwitchQtoP(0, PLevel, ct.Value[0], ringiters[0])
-		be.ModSwitchQtoP(0, PLevel, ct.Value[1], ringiters[1])
+		be.ModSwitchQtoP_Old(0, PLevel, ct.Value[0], ringiters[0])
+		be.ModSwitchQtoP_Old(0, PLevel, ct.Value[1], ringiters[1])
 		elapse = time.Since(starttime)
 		fmt.Println("Q to P time: ", math.Round(((elapse*(time.Duration(sparseN))).Seconds())*100)/100)
 		totaltime += elapse * time.Duration(sparseN)
@@ -1384,8 +1384,8 @@ func Test_CheckTimePCMMSparse(t *testing.T) {
 		}
 		ct.Resize(1, 14)
 		time_ := time.Now()
-		be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
-		be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
+		be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
+		be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
 		elapse_ := time.Since(time_)
 		fmt.Println("P to Q time: ", math.Round(((elapse_*(time.Duration(sparseN))).Seconds())*100)/100)
 		totaltime += elapse_ * (time.Duration(sparseN))
@@ -1510,8 +1510,8 @@ func Test_CheckTimePCMMSparse_Inplace(t *testing.T) {
 		var totaltime time.Duration
 		sparseN := 1 << s
 		starttime = time.Now()
-		be.ModSwitchQtoP(0, PLevel, ct.Value[0], ringiters[0])
-		be.ModSwitchQtoP(0, PLevel, ct.Value[1], ringiters[1])
+		be.ModSwitchQtoP_Old(0, PLevel, ct.Value[0], ringiters[0])
+		be.ModSwitchQtoP_Old(0, PLevel, ct.Value[1], ringiters[1])
 		elapse = time.Since(starttime)
 		fmt.Println("Q to P time: ", math.Round(((elapse*(time.Duration(sparseN))).Seconds())*100)/100)
 		totaltime += elapse * time.Duration(sparseN)
@@ -1581,8 +1581,8 @@ func Test_CheckTimePCMMSparse_Inplace(t *testing.T) {
 		}
 		ct.Resize(1, 14)
 		time_ := time.Now()
-		be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
-		be.ModSwitchPtoQ(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
+		be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[0], ct.Value[0])
+		be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), ringiters[1], ct.Value[1])
 		elapse_ := time.Since(time_)
 		fmt.Println("P to Q time: ", math.Round(((elapse_*(time.Duration(sparseN))).Seconds())*100)/100)
 		totaltime += elapse_ * (time.Duration(sparseN))

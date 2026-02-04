@@ -150,6 +150,25 @@ void multiply_mod_matrix_blas_Inplace(const double *a,
         );
     }
 }
+void multiply_mod_matrix_blas_Inplace2(const double *a,
+                         const double *b,
+                         double *result,
+                         const unsigned int  n_a,
+                         const unsigned int  n_b,
+                         const unsigned int  n_c)
+{
+    cblas_dgemm(
+        CblasRowMajor,   // 메모리 저장 방식 (row-major)
+        CblasNoTrans,CblasNoTrans,    // A를 전치하지 않음
+        n_a, n_c,n_b,            // 행렬 A의 크기 (m x n)
+        1,           // 스케일 값 alpha
+        &(a[0]), n_b,            // 행렬 A와 leading dimension (n)
+        &(b[0]), n_c,            // 벡터 x와 stride
+        0,            // 스케일 값 beta
+        &(result[0]), n_c             // 결과 벡터 y와 stride
+    );
+}
+
 
 
 

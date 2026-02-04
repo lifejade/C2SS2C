@@ -54,9 +54,9 @@ func DebugPrec(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *heflo
 		dept := decryptor.DecryptNew(cttmp)
 		encoder.Decode(dept, value)
 
-		// fmt.Println(value)
-		// fmt.Println(ptvalues[i])
-		// fmt.Println()
+		fmt.Println(value)
+		fmt.Println(ptvalues[i])
+		fmt.Println()
 
 		for j := range ptvalues[i] {
 			val := math.Abs(value[j*ratio] - ptvalues[i][j])

@@ -41,14 +41,10 @@ func ModUpQtoQ(ringQ *ring.Ring, levelQ int, polQIn, polQOut ring.Poly) {
 
 // input INTT, output INTT
 func ModUp(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloat.Encoder, encryptor *rlwe.Encryptor, eval *hefloat.Evaluator, N, sparseN, H int, rescts []*rlwe.Ciphertext) {
+	var elapseThis time.Duration
+
 	ringQ := params.RingQ().AtLevel(params.MaxLevel())
 	ratio := N / sparseN
-	defer func() {
-		if util.Debug.IsDebug {
-			util.Debug.StartTime = time.Time{}
-			util.Debug.AccTime = 0
-		}
-	}()
 
 	for i := range cts {
 		if cts[i].Level() != 0 {
@@ -99,7 +95,9 @@ func ModUp(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloat.E
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
 		fmt.Println("gk init end", elapse)
+		elapseThis += elapse
 		util.Debug.StartTime = time.Now()
+
 	}
 
 	if H > 0 {
@@ -116,7 +114,8 @@ func ModUp(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloat.E
 	if util.Debug.IsDebug && H > 0 {
 		elapse := time.Since(util.Debug.StartTime)
 		fmt.Println("Dense To Sparse End : ", elapse)
-		util.Debug.AccTime += elapse
+		// util.Debug.AccTime += elapse
+		elapseThis += elapse
 		util.Debug.StartTime = time.Now()
 	}
 
@@ -134,8 +133,9 @@ func ModUp(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloat.E
 	}
 	if util.Debug.IsDebug && H > 0 {
 		elapse := time.Since(util.Debug.StartTime)
-		util.Debug.AccTime += elapse
-		fmt.Println("Sparse To Dense End : ", util.Debug.AccTime)
+		// util.Debug.AccTime += elapse
+		elapseThis += elapse
+		fmt.Println("Sparse To Dense End : ", elapse)
 		util.Debug.StartTime = time.Now()
 	}
 	for i := range rescts {
@@ -164,258 +164,17 @@ func ModUp(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloat.E
 
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
-		util.Debug.AccTime += elapse
+		elapseThis += elapse
+		util.Debug.AccTime += elapseThis
 		fmt.Println("PartialSum End : ", elapse)
-		fmt.Println("ModUp End : ", util.Debug.AccTime)
+		fmt.Println("ModUp End : ", elapseThis)
 	}
 
 }
 
-// // input must be INTT
-// func (context *Context) CoeffToSlot(cts []*rlwe.Ciphertext) (result, result2 []*rlwe.Ciphertext) {
-// 	N := context.N
-// 	sparseN := context.SparseN
-// 	n := sparseN >> 1
-
-// 	params := context.params
-// 	evaluator := context.Evaluator
-
-// 	ringQ := context.alloced.ringQ
-// 	ringP := context.alloced.ringP
-// 	be := context.alloced.be
-// 	inputPolys := context.alloced.inputPolys
-// 	inputPolysC := context.alloced.inputPolysC
-// 	ppmmbuffer1 := context.alloced.ppmmbuffer1
-// 	ppmmbuffer2 := context.alloced.ppmmbuffer2
-// 	resPolys00 := context.alloced.resPolys00
-// 	resPolys00i := context.alloced.resPolys00i
-// 	resPolys01 := context.alloced.resPolys01
-// 	resPolys01i := context.alloced.resPolys01i
-// 	resPolys10 := context.alloced.resPolys10
-// 	resPolys10i := context.alloced.resPolys10i
-// 	resPolys11 := context.alloced.resPolys11
-// 	resPolys11i := context.alloced.resPolys11i
-// 	tempPoly := context.alloced.tempPoly
-// 	work := context.alloced.work
-// 	aux := context.alloced.aux
-
-// 	C2SParams := context.C2SParams
-// 	CL_arr := C2SParams.params.CL_arr
-// 	PLevel := C2SParams.params.PLevel
-// 	mat0 := C2SParams.mat0
-// 	mat0i := C2SParams.mat0i
-// 	mat0s := C2SParams.mat0s
-
-// 	// fmt.Println(tempPoly[0][0].Level())
-// 	// fmt.Println(resPolys00[0][0].Level())
-
-// 	ctzero := context.alloced.ctzero
-// 	result = make([]*rlwe.Ciphertext, sparseN)
-// 	result2 = make([]*rlwe.Ciphertext, sparseN)
-// 	for i := range sparseN {
-// 		result[i] = ctzero.CopyNew()
-// 		result2[i] = ctzero.CopyNew()
-// 	}
-
-// 	if util.Debug.IsDebug {
-// 		fmt.Println("start c2s")
-// 		util.Debug.StartTime = time.Now()
-// 	}
-
-// 	for i := range sparseN {
-// 		for d := range 2 {
-// 			be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
-// 		}
-// 		if i < n {
-// 			ringQ.AtLevel(cts[i].Level()).Neg(cts[i+n].Value[0], work[0].Value[0])
-// 			ringQ.AtLevel(cts[i].Level()).Neg(cts[i+n].Value[1], work[0].Value[1])
-// 		} else {
-// 			work[0] = cts[i-n]
-// 		}
-// 		for d := range 2 {
-// 			be.ModSwitchQtoP(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
-// 		}
-// 	}
-// 	work[0] = ctzero.CopyNew()
-
-// 	inter_it := n
-// 	for l := range len(CL_arr) {
-// 		inter := inter_it >> CL_arr[l]
-// 		llen := (1 << CL_arr[l])
-// 		if l == 0 {
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
-
-// 				//10~11
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
-
-// 			}
-
-// 		} else if l == len(CL_arr)-1 {
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01i, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, resPolys00, resPolys00i, resPolys00)
-// 			matmult.AddManyRing(ringP, resPolys01, resPolys01i, resPolys01i)
-
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11i, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, resPolys10i, resPolys10, resPolys10)
-// 			matmult.AddManyRing(ringP, resPolys11, resPolys11i, resPolys11i)
-
-// 		} else {
-// 			matmult.AddManyRing(ringP, resPolys00, resPolys00i, tempPoly)
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(tempPoly, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPoly, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys00, tempPoly)
-// 			matmult.SubManyRing(ringP, resPolys00, resPolys00i, resPolys00)
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys00i, resPolys00i)
-
-// 			matmult.AddManyRing(ringP, resPolys01, resPolys01i, tempPoly)
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01i, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(tempPoly, mat0s[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, tempPoly, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys01, tempPoly)
-// 			matmult.SubManyRing(ringP, resPolys01, resPolys01i, resPolys01)
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys01i, resPolys01i)
-
-// 			matmult.AddManyRing(ringP, resPolys10, resPolys10i, tempPoly)
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(tempPoly, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPoly, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys10, tempPoly)
-// 			matmult.SubManyRing(ringP, resPolys10, resPolys10i, resPolys10)
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys10i, resPolys10i)
-
-// 			matmult.AddManyRing(ringP, resPolys11, resPolys11i, tempPoly)
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11i, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(tempPoly, mat0s[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, tempPoly, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys11, tempPoly)
-// 			matmult.SubManyRing(ringP, resPolys11, resPolys11i, resPolys11)
-// 			matmult.SubManyRing(ringP, tempPoly, resPolys11i, resPolys11i)
-
-// 		}
-// 		inter_it = inter
-// 	}
-// 	matmult.AddManyRing(ringP, resPolys00, resPolys01i, resPolys00)
-// 	matmult.AddManyRing(ringP, resPolys10, resPolys11i, resPolys10)
-
-// 	bitlen := bits.Len64(uint64(n)) - 1
-// 	for d := range 2 {
-// 		for i := range sparseN {
-// 			if i < n {
-// 				br := util.BitReverse(i, bitlen)
-// 				if i >= br {
-// 					continue
-// 				}
-// 				resPolys00[d][i], resPolys00[d][util.BitReverse(i, bitlen)] = resPolys00[d][util.BitReverse(i, bitlen)], resPolys00[d][i]
-// 				resPolys10[d][i], resPolys10[d][util.BitReverse(i, bitlen)] = resPolys10[d][util.BitReverse(i, bitlen)], resPolys10[d][i]
-// 			} else {
-// 				i := i % n
-// 				br := util.BitReverse(i, bitlen)
-// 				if i >= br {
-// 					continue
-// 				}
-// 				resPolys00[d][n+i], resPolys00[d][n+util.BitReverse(i, bitlen)] = resPolys00[d][n+util.BitReverse(i, bitlen)], resPolys00[d][n+i]
-// 				resPolys10[d][n+i], resPolys10[d][n+util.BitReverse(i, bitlen)] = resPolys10[d][n+util.BitReverse(i, bitlen)], resPolys10[d][n+i]
-// 			}
-// 		}
-// 	}
-
-// 	q := rlwe.NewScale(params.DefaultScale())
-// 	for i := range len(CL_arr) {
-// 		q = q.Mul(rlwe.NewScale(params.Q()[C2SParams.params.EndLevel-i]))
-// 	}
-
-// 	for i := range sparseN {
-// 		result[i].Resize(1, C2SParams.params.EndLevel)
-// 		result2[i].Resize(1, C2SParams.params.EndLevel)
-// 		for idx := range 2 {
-// 			be.ModSwitchPtoQ(PLevel, C2SParams.params.EndLevel, resPolys00[idx][i], result[i].Value[idx])
-// 			be.ModSwitchPtoQ(PLevel, C2SParams.params.EndLevel, resPolys10[idx][i], result2[i].Value[idx])
-// 		}
-
-// 		result[i].Scale = q
-// 		result2[i].Scale = q
-// 		util.Rescale_NonNTT(evaluator, result[i], result[i])
-// 		util.Rescale_NonNTT(evaluator, result2[i], result2[i])
-// 	}
-// 	// fmt.Println(result[0].LogScale())
-// 	if util.Debug.IsDebug {
-// 		elapse := time.Since(util.Debug.StartTime)
-// 		fmt.Println("CTS-PPMM End : ", elapse)
-// 		util.Debug.AccTime += elapse
-// 		fmt.Println("CTS-CMT Start")
-// 		util.Debug.StartTime = time.Now()
-// 	}
-
-// 	transpose.Transpose_Sparse(result, params, evaluator, ringQ.AtLevel(result[0].Level()), N, sparseN, work, aux, result)
-// 	transpose.Transpose_Sparse(result2, params, evaluator, ringQ.AtLevel(result2[0].Level()), N, sparseN, work, aux, result2)
-
-// 	if util.Debug.IsDebug {
-// 		elapse := time.Since(util.Debug.StartTime)
-// 		fmt.Println("CTS-CMT End: ", elapse)
-// 		util.Debug.AccTime += elapse
-// 		util.Debug.StartTime = time.Now()
-// 	}
-
-// 	for i := range result {
-
-// 		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
-// 		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
-
-// 		conj, _ := evaluator.ConjugateNew(result[i])
-// 		evaluator.Add(result[i], conj, result[i])
-
-// 		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[0], result2[i].Value[0])
-// 		ringQ.AtLevel(result2[i].Level()).NTT(result2[i].Value[1], result2[i].Value[1])
-
-// 		conj, _ = evaluator.ConjugateNew(result2[i])
-// 		evaluator.Add(result2[i], conj, result2[i])
-// 	}
-
-// 	if util.Debug.IsDebug {
-// 		elapse := time.Since(util.Debug.StartTime)
-// 		fmt.Println("end c2s : ", elapse)
-// 		util.Debug.AccTime += elapse
-// 	}
-
-// 	return
-// }
-
 // input must be INTT
 func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []*rlwe.Ciphertext) {
+	var elapseThis time.Duration
 	N := context.N
 	sparseN := context.SparseN
 	n := sparseN >> 1
@@ -443,18 +202,24 @@ func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []
 		result[i] = ctzero.CopyNew()
 		result2[i] = ctzero.CopyNew()
 	}
+
+	if util.Debug.IsDebug {
+		fmt.Println("start c2s")
+		util.PrintMemUsage()
+		util.Debug.StartTime = time.Now()
+	}
+
 	for i := range sparseN {
 		for d := range 2 {
 			be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 	}
 
-	if util.Debug.IsDebug {
-		fmt.Println("start c2s")
-		util.Debug.StartTime = time.Now()
+	if len(CL_arr) != 1 {
+		context.CTS_PCMM(inputPolys, resPolys)
+	} else {
+		context.CTS_PCMM_NoCollpase(inputPolys, resPolys)
 	}
-
-	context.CTS_PCMM(inputPolys, resPolys)
 
 	q := rlwe.NewScale(params.DefaultScale())
 	for i := range len(CL_arr) {
@@ -476,8 +241,12 @@ func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []
 			inputPolys[d][j], inputPolys[d][j+n] = inputPolys[d][j+n], inputPolys[d][j]
 		}
 	}
+	if len(CL_arr) != 1 {
+		context.CTS_PCMM(inputPolys, resPolys)
+	} else {
+		context.CTS_PCMM_NoCollpase(inputPolys, resPolys)
+	}
 
-	context.CTS_PCMM(inputPolys, resPolys)
 	for i := range sparseN {
 		result2[i].Resize(1, C2SParams.params.EndLevel)
 		for idx := range 2 {
@@ -492,7 +261,7 @@ func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
 		fmt.Println("CTS-PPMM & Rescale End : ", elapse)
-		util.Debug.AccTime += elapse
+		elapseThis += elapse
 		fmt.Println("CTS-CMT Start")
 		util.Debug.StartTime = time.Now()
 	}
@@ -502,8 +271,7 @@ func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []
 
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
-		fmt.Println("CTS-CMT End: ", elapse)
-		util.Debug.AccTime += elapse
+		elapseThis += elapse
 		util.Debug.StartTime = time.Now()
 	}
 	conj := aux[0].CopyNew()
@@ -522,41 +290,16 @@ func (context *Context) CoeffToSlot2(cts []*rlwe.Ciphertext) (result, result2 []
 
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
-		fmt.Println("end c2s : ", elapse)
-		util.Debug.AccTime += elapse
+		elapseThis += elapse
+		fmt.Println("end c2s : ", elapseThis)
+		util.Debug.AccTime += elapseThis
 	}
 
 	return
 }
 
 func (context *Context) bufferclear() {
-	realPolys := context.alloced.realPolys
-	imagPolys := context.alloced.imagPolys
-	tempPolys := context.alloced.tempPolys
 	resPolys := context.alloced.resPolys
-	for d := range realPolys {
-		for i := range realPolys[d] {
-			for l := range realPolys[d][i].Coeffs {
-				clear(realPolys[d][i].Coeffs[l])
-			}
-		}
-	}
-
-	for d := range imagPolys {
-		for i := range imagPolys[d] {
-			for l := range imagPolys[d][i].Coeffs {
-				clear(imagPolys[d][i].Coeffs[l])
-			}
-		}
-	}
-
-	for d := range tempPolys {
-		for i := range tempPolys[d] {
-			for l := range tempPolys[d][i].Coeffs {
-				clear(tempPolys[d][i].Coeffs[l])
-			}
-		}
-	}
 
 	for d := range resPolys {
 		for i := range resPolys[d] {
@@ -567,7 +310,7 @@ func (context *Context) bufferclear() {
 	}
 }
 
-func (context *Context) CTS_PCMM(inputPolys [][]ring.Poly, resPolys [][]ring.Poly) {
+func (context *Context) CTS_PCMM(inputPolys [][]matmult.Poly, resPolys [][]matmult.Poly) {
 	ppmmbuffer1 := context.alloced.ppmmbuffer1
 	ppmmbuffer2 := context.alloced.ppmmbuffer2
 
@@ -588,74 +331,77 @@ func (context *Context) CTS_PCMM(inputPolys [][]ring.Poly, resPolys [][]ring.Pol
 	sparseN := context.SparseN
 	n := sparseN >> 1
 	context.bufferclear()
-	//00
-	inter_it := n
-	for l := range len(CL_arr) {
-		inter := inter_it >> CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+
+	for d := range 2 {
+		//00
+		inter_it := n
+		for l := range len(CL_arr) {
+			inter := inter_it >> CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, resPolys[d], 0)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
 			}
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, realPolys, imagPolys, resPolys)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
+
+			inter_it = inter
 		}
 
-		inter_it = inter
-	}
+		//01
+		inter_it = n
+		for l := range len(CL_arr) {
+			inter := inter_it >> CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
 
-	//01
-	inter_it = n
-	for l := range len(CL_arr) {
-		inter := inter_it >> CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.AddManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], n)
+				matmult.AddManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], n)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
 			}
 
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.AddManyRingIdx(ringP, resPolys, realPolys, resPolys, n)
-			matmult.AddManyRingIdx(ringP, resPolys, imagPolys, resPolys, n)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
+			inter_it = inter
 		}
-
-		inter_it = inter
 	}
 
 	bitlen := bits.Len64(uint64(n)) - 1
@@ -679,165 +425,189 @@ func (context *Context) CTS_PCMM(inputPolys [][]ring.Poly, resPolys [][]ring.Pol
 	}
 }
 
-// // input must be NTT
-// func (context *Context) SlotToCoeff(ctreal, ctimage []*rlwe.Ciphertext) (result []*rlwe.Ciphertext) {
-// 	N := context.N
-// 	sparseN := context.SparseN
-// 	n := sparseN >> 1
+func (context *Context) CTS_PCMM_NoCollpase(inputPolys [][]matmult.Poly, resPolys [][]matmult.Poly) {
+	ppmmbuffer1 := context.alloced.ppmmbuffer1
+	ppmmbuffer2 := context.alloced.ppmmbuffer2
 
-// 	params := context.params
-// 	evaluator := context.Evaluator
+	//len(P) * n * N
+	realPolys := context.alloced.realPolys
+	imagPolys := context.alloced.imagPolys
+	ringP := context.alloced.ringP
 
-// 	S2CParams := context.S2CParams
-// 	CL_arr := S2CParams.params.CL_arr
-// 	PLevel := S2CParams.params.PLevel
-// 	P := context.P[:PLevel+1]
+	C2SParams := context.C2SParams
+	PLevel := C2SParams.params.PLevel
+	mat0 := C2SParams.mat0
+	mat0i := C2SParams.mat0i
 
-// 	mat0 := S2CParams.mat0
-// 	mat0i := S2CParams.mat0i
-// 	// mat0s := S2CParams.mat0s
+	N := context.N
+	sparseN := context.SparseN
+	n := sparseN >> 1
+	context.bufferclear()
 
-// 	ctzero := context.alloced.ctzero
+	inter := 1
+	llen := n
+	for d := range 2 {
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[0][0], llen, llen, N, 0, 0, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[0][0], llen, llen, N, 0, 0, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.AddManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], 0)
+		matmult.AddManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], n)
+	}
 
-// 	result = make([]*rlwe.Ciphertext, sparseN)
-// 	for i := range result {
-// 		result[i] = ctzero.CopyNew()
-// 	}
+	bitlen := bits.Len64(uint64(n)) - 1
+	for d := range 2 {
+		for i := range sparseN {
+			if i < n {
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				resPolys[d][i], resPolys[d][util.BitReverse(i, bitlen)] = resPolys[d][util.BitReverse(i, bitlen)], resPolys[d][i]
+			} else {
+				i := i % n
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				resPolys[d][n+i], resPolys[d][n+util.BitReverse(i, bitlen)] = resPolys[d][n+util.BitReverse(i, bitlen)], resPolys[d][n+i]
+			}
+		}
+	}
+}
 
-// 	work := context.alloced.work
-// 	aux := context.alloced.aux
+func (context *Context) CTS_PCMM_LowMem(inputPolys [][]matmult.Poly, resPolys [][]matmult.Poly) {
+	ppmmbuffer1 := context.alloced.ppmmbuffer1
+	ppmmbuffer2 := context.alloced.ppmmbuffer2
 
-// 	if ctimage != nil {
-// 		for i := range sparseN {
-// 			imag, _ := evaluator.MulNew(ctimage[i], 1i)
+	ringP := context.alloced.ringP
 
-// 			cts[i], _ = evaluator.AddNew(ctreal[i], imag)
-// 			ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[0], cts[i].Value[0])
-// 			ringQ.AtLevel(cts[i].Level()).INTT(cts[i].Value[1], cts[i].Value[1])
-// 		}
-// 	} else {
-// 		copy(cts, ctreal)
-// 	}
+	C2SParams := context.C2SParams
+	PLevel := C2SParams.params.PLevel
+	CL_arr := C2SParams.params.CL_arr
+	mat0 := C2SParams.mat0
+	mat0i := C2SParams.mat0i
+	mat0s := C2SParams.mat0s
 
-// 	transpose.Transpose3(cts, params, evaluator, ringQ.AtLevel(cts[0].Level()), N, sparseN, work, aux, cts)
+	N := context.N
+	sparseN := context.SparseN
+	n := sparseN >> 1
+	P := ringP.ModuliChain()
+	context.bufferclear()
+	inputbuffer := make([]uint32, sparseN*N)
+	realbuffer := make([]uint32, n*N)
+	imagbuffer := make([]uint32, n*N)
+	tempbuffer := make([]uint32, n*N)
+	util.PrintMemUsage()
+	// copy(buffer[i*N:], inputPolys[d][i].Coeffs[level])
 
-// 	for i := range sparseN {
-// 		for d := range 2 {
-// 			be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
-// 		}
-// 		if i < n {
-// 			ringQ.AtLevel(cts[0].Level()).Neg(cts[i+n].Value[0], work[0].Value[0])
-// 			ringQ.AtLevel(cts[0].Level()).Neg(cts[i+n].Value[1], work[0].Value[1])
-// 		} else {
-// 			work[0] = cts[i-n]
-// 		}
-// 		for d := range 2 {
-// 			be.ModSwitchQtoP(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
-// 		}
-// 	}
+	//00
 
-// 	rev := matmult.BitReversePermutationMatrix(n)
-// 	matrev := make([]float64, len(P)*N*N)
-// 	for p := range len(P) {
-// 		for i := range N {
-// 			for j := range N {
-// 				if (i < n && j < n) || (i >= n && j >= n) {
-// 					matrev[p*N*N+i*N+j] = (real(rev[i%n][j%n]))
-// 				}
-// 			}
-// 		}
-// 	}
+	for d := range 2 {
+		for level := range PLevel {
+			for i := range inputPolys[d] {
+				copy(inputbuffer[i*N:(i+1)*N], inputPolys[d][i].Coeffs[level])
+			}
+			inter_it := n
+			for l := range len(CL_arr) {
+				inter := inter_it >> CL_arr[l]
+				llen := (1 << CL_arr[l])
+				if l == 0 {
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(inputbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(inputbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
+				} else if l == len(CL_arr)-1 {
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(realbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(imagbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
+					matmult.SubManyRingIdx_LowMem(realbuffer, imagbuffer, tempbuffer, 0, N, uint32(P[level]))
+					for j := range n {
+						copy(resPolys[d][j].Coeffs[level], tempbuffer[j*N:(j+1)*N])
+					}
 
-// 	matmult.PPMM_Blas_CRT_Inplace(inputPolys, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
-// 	matmult.PPMM_Blas_CRT_Inplace(inputPolysC, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
+				} else {
+					matmult.AddManyRingIdx_LowMem(realbuffer, imagbuffer, tempbuffer, 0, N, uint32(P[level]))
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(realbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(imagbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(tempbuffer, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), tempbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
+					matmult.SubManyRingIdx_LowMem(tempbuffer, realbuffer, tempbuffer, 0, N, uint32(P[level]))
+					matmult.SubManyRingIdx_LowMem(realbuffer, imagbuffer, realbuffer, 0, N, uint32(P[level]))
+					matmult.SubManyRingIdx_LowMem(tempbuffer, imagbuffer, imagbuffer, 0, N, uint32(P[level]))
+				}
 
-// 	inter_it = 1
-// 	for l := range len(SF) {
-// 		inter := inter_it
-// 		inter_it = inter << CL_arr[l]
-// 		llen := (1 << CL_arr[l])
-// 		if l == 0 {
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
+				inter_it = inter
+			}
 
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(inputPolysC, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
-// 			}
+			//01
+			inter_it = n
+			for l := range len(CL_arr) {
+				inter := inter_it >> CL_arr[l]
+				llen := (1 << CL_arr[l])
+				if l == 0 {
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(inputbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(inputbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
 
-// 		} else if l == len(SF)-1 {
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys00i, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys00i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys01, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys01i, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, resPolys01i, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, resPolys00, resPolys00i, resPolys00)
-// 			matmult.AddManyRing(ringP, resPolys01, resPolys01i, resPolys01i)
+				} else if l == len(CL_arr)-1 {
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(realbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(imagbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
+					// matmult.AddManyRingIdx_LowMem(resPolys, realbuffer, resPolys, n, N, uint32(P[level]))
+					matmult.AddManyRingIdx_LowMem(realbuffer, imagbuffer, tempbuffer, 0, N, uint32(P[level]))
 
-// 			for t := range n / llen {
-// 				stpoint := (t % inter) + inter_it*int(t/inter)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys10, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys10i, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys10i, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11, mat0i[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11, ppmmbuffer1, ppmmbuffer2)
-// 				matmult.PPMM_Blas_CRT_Stride(resPolys11i, mat0[l][t], llen, llen, N, n+stpoint, inter, PLevel, 2, ringP, resPolys11i, ppmmbuffer1, ppmmbuffer2)
-// 			}
-// 			matmult.SubManyRing(ringP, resPolys10, resPolys10i, resPolys10)
-// 			matmult.AddManyRing(ringP, resPolys11, resPolys11i, resPolys11i)
+					for j := range n {
+						copy(resPolys[d][n+j].Coeffs[level], tempbuffer[j*N:(j+1)*N])
+					}
+				} else {
+					matmult.AddManyRingIdx_LowMem(realbuffer, imagbuffer, tempbuffer, 0, N, uint32(P[level]))
+					for t := range n / llen {
+						stpoint := (t % inter) + inter_it*int(t/inter)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(realbuffer, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), realbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(imagbuffer, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), imagbuffer, ppmmbuffer1, ppmmbuffer2)
+						matmult.PPMM_Blas_CRT_Stride_LowMem(tempbuffer, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, int64(P[level]), tempbuffer, ppmmbuffer1, ppmmbuffer2)
+					}
+					matmult.SubManyRingIdx_LowMem(tempbuffer, realbuffer, tempbuffer, 0, N, uint32(P[level]))
+					matmult.SubManyRingIdx_LowMem(realbuffer, imagbuffer, realbuffer, 0, N, uint32(P[level]))
+					matmult.SubManyRingIdx_LowMem(tempbuffer, imagbuffer, imagbuffer, 0, N, uint32(P[level]))
+				}
 
-// 		}
-
-// 	}
-// 	matmult.AddManyRing(ringP, resPolys00, resPolys01i, resPolys00)
-// 	matmult.AddManyRing(ringP, resPolys00, resPolys10, resPolys00)
-// 	matmult.AddManyRing(ringP, resPolys00, resPolys11i, resPolys00)
-
-// 	// rev := matmult.BitReversePermutationMatrix(n)
-// 	// matrev := make([]float64, len(P)*N*N)
-// 	// for p := range len(P) {
-// 	// 	for i := range N {
-// 	// 		for j := range N {
-// 	// 			if (i < n && j < n) || (i >= n && j >= n) {
-// 	// 				matrev[p*N*N+i*N+j] = (real(rev[i%n][j%n]))
-// 	// 			}
-// 	// 		}
-// 	// 	}
-// 	// }
-
-// 	// matmult.PPMM_Blas_CRT_Inplace(resPolys00, matrev, N, N, N, PLevel+1, 2, ringP, ppmmbuffer1, ppmmbuffer2)
-
-// 	for i := range N {
-// 		for idx := range 2 {
-// 			be.ModSwitchPtoQ(PLevel, S2CParams.EndLevel, resPolys00[idx][i], result[i].Value[idx])
-// 		}
-
-// 		q := rlwe.NewScale(params.Q()[result[i].Level()])
-// 		util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
-// 		util.Rescale_NonNTT(evaluator, result[i], result[i])
-
-// 		q = rlwe.NewScale(params.Q()[result[i].Level()])
-// 		util.Mul_ScaleExact(evaluator, result[i], 1.0/(scale), result[i], q)
-// 		util.Rescale_NonNTT(evaluator, result[i], result[i])
-// 	}
-
-// 	transpose.Transpose3(result, params, evaluator, ringQ.AtLevel(result[0].Level()), N, sparseN, work, aux, result)
-
-// 	for i := range result {
-// 		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
-// 		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
-// 	}
-
-// 	return
-// }
+				inter_it = inter
+			}
+		}
+	}
+	bitlen := bits.Len64(uint64(n)) - 1
+	for d := range 2 {
+		for i := range sparseN {
+			if i < n {
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				resPolys[d][i], resPolys[d][util.BitReverse(i, bitlen)] = resPolys[d][util.BitReverse(i, bitlen)], resPolys[d][i]
+			} else {
+				i := i % n
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				resPolys[d][n+i], resPolys[d][n+util.BitReverse(i, bitlen)] = resPolys[d][n+util.BitReverse(i, bitlen)], resPolys[d][n+i]
+			}
+		}
+	}
+}
 
 // input must be NTT
 func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result []*rlwe.Ciphertext) {
+	var elapseThis time.Duration
 	N := context.N
 	sparseN := context.SparseN
 	// n := sparseN >> 1
@@ -855,6 +625,8 @@ func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result
 	result = make([]*rlwe.Ciphertext, sparseN)
 	for i := range result {
 		result[i] = ctzero.CopyNew()
+		result[i].Resize(1, S2CParams.params.StartLevel)
+		// evaluator.DropLevel(result[i], result[i].Level()-S2CParams.params.StartLevel)
 	}
 
 	work := context.alloced.work
@@ -864,6 +636,10 @@ func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result
 
 	inputPolys := context.alloced.inputPolys
 	resPolys := context.alloced.resPolys
+	if util.Debug.IsDebug {
+		fmt.Println("STC Start")
+		util.Debug.StartTime = time.Now()
+	}
 
 	if ctimage != nil {
 		for i := range sparseN {
@@ -878,16 +654,18 @@ func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result
 			ringQ.AtLevel(ctreal[i].Level()).INTT(ctreal[i].Value[1], result[i].Value[1])
 		}
 	}
-
 	transpose.Transpose_Sparse(result, params, evaluator, ringQ.AtLevel(result[0].Level()), N, sparseN, work, aux, result)
-
 	for i := range sparseN {
 		for d := range 2 {
 			be.ModSwitchQtoP(result[i].Level(), PLevel, result[i].Value[d], inputPolys[d][i])
 		}
 	}
+	if len(CL_arr) != 1 {
+		context.STC_PPMM(inputPolys, resPolys)
+	} else {
+		context.STC_PPMM_NoCollapse(inputPolys, resPolys)
+	}
 
-	context.STC_PPMM(inputPolys, resPolys)
 	q := rlwe.NewScale(params.DefaultScale())
 	for i := range len(CL_arr) {
 		q = q.Mul(rlwe.NewScale(params.Q()[S2CParams.params.EndLevel-i]))
@@ -902,15 +680,20 @@ func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result
 		util.Rescale_NonNTT(evaluator, result[i], result[i])
 	}
 
-	for i := range result {
-		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
-		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+	// for i := range result {
+	// 	ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
+	// 	ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+	// }
+	if util.Debug.IsDebug {
+		elapse := time.Since(util.Debug.StartTime)
+		elapseThis += elapse
+		fmt.Println("STC End")
+		util.Debug.AccTime += elapseThis
 	}
-
 	return
 }
 
-func (context *Context) STC_PPMM(inputPolys [][]ring.Poly, resPolys [][]ring.Poly) {
+func (context *Context) STC_PPMM(inputPolys [][]matmult.Poly, resPolys [][]matmult.Poly) {
 	ppmmbuffer1 := context.alloced.ppmmbuffer1
 	ppmmbuffer2 := context.alloced.ppmmbuffer2
 
@@ -949,143 +732,195 @@ func (context *Context) STC_PPMM(inputPolys [][]ring.Poly, resPolys [][]ring.Pol
 			}
 		}
 	}
-
+	context.bufferclear()
 	//00
-	inter_it := 1
-	for l := range len(CL_arr) {
-		inter := inter_it
-		inter_it = inter << CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
+	for d := range 2 {
+		inter_it := 1
+		for l := range len(CL_arr) {
+			inter := inter_it
+			inter_it = inter << CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
 
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, resPolys[d], 0)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
 			}
-			matmult.SubManyRing(ringP, realPolys, imagPolys, resPolys)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+		}
+
+		//01
+		inter_it = 1
+		for l := range len(CL_arr) {
+			inter := inter_it
+			inter_it = inter << CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], 0)
+				matmult.SubManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], 0)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
 			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
+		}
+
+		//10
+		inter_it = 1
+		for l := range len(CL_arr) {
+			inter := inter_it
+			inter_it = inter << CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.AddManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], n)
+				matmult.SubManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], n)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
+			}
+		}
+
+		//11
+		inter_it = 1
+		for l := range len(CL_arr) {
+			inter := inter_it
+			inter_it = inter << CL_arr[l]
+			llen := (1 << CL_arr[l])
+			if l == 0 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+
+			} else if l == len(CL_arr)-1 {
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.AddManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], n)
+				matmult.AddManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], n)
+			} else {
+				matmult.AddManyRingIdx(ringP, realPolys, imagPolys, tempPolys, 0)
+				for t := range n / llen {
+					stpoint := (t % inter) + inter_it*int(t/inter)
+					matmult.PPMM_Blas_CRT_Stride2(realPolys, mat0[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(imagPolys, mat0i[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+					matmult.PPMM_Blas_CRT_Stride2(tempPolys, mat0s[l][t], llen, llen, N, stpoint, stpoint, inter, PLevel, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
+				}
+				matmult.SubManyRingIdx(ringP, tempPolys, realPolys, tempPolys, 0)
+				matmult.SubManyRingIdx(ringP, realPolys, imagPolys, realPolys, 0)
+				matmult.SubManyRingIdx(ringP, tempPolys, imagPolys, imagPolys, 0)
+			}
 		}
 	}
 
-	//01
-	inter_it = 1
-	for l := range len(CL_arr) {
-		inter := inter_it
-		inter_it = inter << CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0i[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
+}
 
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+func (context *Context) STC_PPMM_NoCollapse(inputPolys [][]matmult.Poly, resPolys [][]matmult.Poly) {
+	ppmmbuffer1 := context.alloced.ppmmbuffer1
+	ppmmbuffer2 := context.alloced.ppmmbuffer2
+
+	realPolys := context.alloced.realPolys
+	imagPolys := context.alloced.imagPolys
+	ringP := context.alloced.ringP
+	S2CParams := context.S2CParams
+
+	PLevel := S2CParams.params.PLevel
+	mat0 := S2CParams.mat0
+	mat0i := S2CParams.mat0i
+
+	N := context.N
+	sparseN := context.SparseN
+	n := sparseN >> 1
+
+	bitlen := bits.Len64(uint64(n)) - 1
+	for d := range 2 {
+		for i := range sparseN {
+			if i < n {
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				inputPolys[d][i], inputPolys[d][util.BitReverse(i, bitlen)] = inputPolys[d][util.BitReverse(i, bitlen)], inputPolys[d][i]
+			} else {
+				i := i % n
+				br := util.BitReverse(i, bitlen)
+				if i >= br {
+					continue
+				}
+				inputPolys[d][n+i], inputPolys[d][n+util.BitReverse(i, bitlen)] = inputPolys[d][n+util.BitReverse(i, bitlen)], inputPolys[d][n+i]
 			}
-			matmult.SubManyRing(ringP, resPolys, realPolys, resPolys)
-			matmult.SubManyRing(ringP, resPolys, imagPolys, resPolys)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
 		}
 	}
-
-	//10
-	inter_it = 1
-	for l := range len(CL_arr) {
-		inter := inter_it
-		inter_it = inter << CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride2(inputPolys, mat0i[l][t], llen, llen, N, n+stpoint, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.AddManyRingIdx(ringP, resPolys, realPolys, resPolys, n)
-			matmult.SubManyRingIdx(ringP, resPolys, imagPolys, resPolys, n)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
-		}
+	context.bufferclear()
+	for d := range 2 {
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[0][0], n, n, N, 0, 0, 1, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[0][0], n, n, N, n, 0, 1, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.SubManyRingIdx(ringP, realPolys, imagPolys, resPolys[d], 0)
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0[0][0], n, n, N, n, 0, 1, PLevel, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.AddManyRingIdx(ringP, resPolys[d], realPolys, resPolys[d], n)
+		matmult.PPMM_Blas_CRT_Stride2(inputPolys[d], mat0i[0][0], n, n, N, 0, 0, 1, PLevel, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
+		matmult.AddManyRingIdx(ringP, resPolys[d], imagPolys, resPolys[d], n)
 	}
 
-	//11
-	inter_it = 1
-	for l := range len(CL_arr) {
-		inter := inter_it
-		inter_it = inter << CL_arr[l]
-		llen := (1 << CL_arr[l])
-		if l == 0 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(inputPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-
-		} else if l == len(CL_arr)-1 {
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.AddManyRingIdx(ringP, resPolys, realPolys, resPolys, n)
-			matmult.AddManyRingIdx(ringP, resPolys, imagPolys, resPolys, n)
-		} else {
-			matmult.AddManyRing(ringP, realPolys, imagPolys, tempPolys)
-			for t := range n / llen {
-				stpoint := (t % inter) + inter_it*int(t/inter)
-				matmult.PPMM_Blas_CRT_Stride(realPolys, mat0[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, realPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(imagPolys, mat0i[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, imagPolys, ppmmbuffer1, ppmmbuffer2)
-				matmult.PPMM_Blas_CRT_Stride(tempPolys, mat0s[l][t], llen, llen, N, stpoint, inter, PLevel, 2, ringP, tempPolys, ppmmbuffer1, ppmmbuffer2)
-			}
-			matmult.SubManyRing(ringP, tempPolys, realPolys, tempPolys)
-			matmult.SubManyRing(ringP, realPolys, imagPolys, realPolys)
-			matmult.SubManyRing(ringP, tempPolys, imagPolys, imagPolys)
-		}
-	}
 }

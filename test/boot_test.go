@@ -122,6 +122,136 @@ func AreInverses(A, B [][]complex128, tol float64) bool {
 	return closeMat(BA, I, tol)
 }
 
+func Test_BootBasic(t *testing.T) {
+	logN := 15
+	galLen := 1
+	// sparses := []int{5}
+	// lenCL := []int{2}
+
+	//ckks parameter init
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            logN,
+		LogQ:            []int{48, 40, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
+		LogP:            []int{52},
+		LogDefaultScale: 40,
+	}
+
+	params, err := hefloat.NewParametersFromLiteral(SchemeParams)
+	if err != nil {
+		panic(err)
+	}
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	fmt.Println("galLen : ", galLen)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, galLen)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	_ = evaluator
+	fmt.Println("ckks parameter init end")
+	CoeffsToSlotsParameters := hefloat.DFTMatrixLiteral{
+		Type:         hefloat.HomomorphicEncode,
+		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
+		LogSlots:     params.LogMaxSlots(),
+		LevelStart:   params.MaxLevel(),
+		Levels:       []int{1, 1}, //qiCoeffsToSlots
+		LogBSGSRatio: 0,
+		BitReversed:  false,
+	}
+
+	// Parameters of the homomorphic modular reduction x mod 1
+	Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
+		LevelStart:      params.MaxLevel() - 2,
+		LogScale:        48,                  // Matches qiEvalMod
+		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
+		Mod1Degree:      63,                  // Depth 6
+		DoubleAngle:     3,                   // Depth 3
+		K:               31,                  // With EphemeralSecretWeight = 32 and 2^{15} slots, ensures < 2^{-138.7} failure probability
+		LogMessageRatio: 8,                   // q/|m| = 2^10
+		Mod1InvDegree:   0,                   // Depth 0
+	}
+
+	// SlotsToCoeffs parameters (homomorphic decoding)
+	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
+		Type:         hefloat.HomomorphicDecode,
+		LogSlots:     params.LogMaxSlots(),
+		LevelStart:   params.MaxLevel() - 11,
+		Levels:       []int{1, 1}, // qiSlotsToCoeffs
+		LogBSGSRatio: 0,
+		BitReversed:  false,
+	}
+
+	// Custom bootstrapping.Parameters.
+	// All fields are public and can be manually instantiated.
+	btpParams := bootstrapping.Parameters{
+		ResidualParameters:      params,
+		BootstrappingParameters: params,
+		SlotsToCoeffsParameters: SlotsToCoeffsParameters,
+		Mod1ParametersLiteral:   Mod1ParametersLiteral,
+		CoeffsToSlotsParameters: CoeffsToSlotsParameters,
+		EphemeralSecretWeight:   0, // > 128bit secure for LogN=16 and LogQP = 115.
+		CircuitOrder:            bootstrapping.Custom,
+	}
+	btpevk, _, _ := btpParams.GenEvaluationKeys(sk)
+	btp, err := bootstrapping.NewEvaluator(btpParams, btpevk)
+	if err != nil {
+		panic(err)
+	}
+	value := make([]float64, params.N())
+	for i := range value {
+		value[i] = 0.0001 * float64(i)
+	}
+	plaintext := hefloat.NewPlaintext(params, params.MaxLevel())
+	plaintext.IsBatched = false
+	encoder.Encode(value, plaintext)
+	ct, _ := encryptor.EncryptNew(plaintext)
+	// runtime.GOMAXPROCS(1)
+	starttime := time.Now()
+	result1, result2, _ := btp.CoeffsToSlots(ct)
+	elapse := time.Since(starttime)
+	fmt.Println()
+	fmt.Println("#############################################################")
+	fmt.Println("Original Total Elapse", elapse)
+
+	dept := decryptor.DecryptNew(result1)
+	dept.IsBatched = true
+	encoder.Decode(dept, value)
+	fmt.Println(value[:100])
+
+	dept = decryptor.DecryptNew(result2)
+	encoder.Decode(dept, value)
+	fmt.Println(value[:100])
+
+}
+
 func Test_Inverse(t *testing.T) {
 
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
@@ -1448,7 +1578,7 @@ func Test_C2SModEval(t *testing.T) {
 
 	for i := range sparseN {
 		for d := range 2 {
-			be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
+			be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
 			// be.ModUpQtoP(PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 		if i < n {
@@ -1458,7 +1588,7 @@ func Test_C2SModEval(t *testing.T) {
 			work[0] = cts[i-n]
 		}
 		for d := range 2 {
-			be.ModSwitchQtoP(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
+			be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
 			// be.ModUpQtoP(PLevel, work[0].Value[d], inputPolysC[d][i])
 		}
 	}
@@ -1533,8 +1663,8 @@ func Test_C2SModEval(t *testing.T) {
 	fmt.Println(resPolys00[0][0])
 	for i := range N {
 		for idx := range 2 {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
 			// ringQ.Mul
 		}
 		if i == 0 {
@@ -1895,7 +2025,7 @@ func Test_CheckC2SPrec(t *testing.T) {
 
 	for i := range sparseN {
 		for d := range 2 {
-			be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
+			be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
 			// be.ModUpQtoP(PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 		if i < n {
@@ -1905,7 +2035,7 @@ func Test_CheckC2SPrec(t *testing.T) {
 			work[0] = cts[i-n]
 		}
 		for d := range 2 {
-			be.ModSwitchQtoP(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
+			be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
 			// be.ModUpQtoP(PLevel, work[0].Value[d], inputPolysC[d][i])
 		}
 	}
@@ -1980,8 +2110,8 @@ func Test_CheckC2SPrec(t *testing.T) {
 	fmt.Println(resPolys00[0][0])
 	for i := range N {
 		for idx := range 2 {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
 			// ringQ.Mul
 		}
 		if i == 0 {
@@ -2389,7 +2519,7 @@ func Test_CheckC2SModEvalPrec(t *testing.T) {
 
 	for i := range sparseN {
 		for d := range 2 {
-			// be.ModSwitchQtoP(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
+			// be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, cts[i].Value[d], inputPolys[d][i])
 			be.ModUpQtoP(PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 		if i < n {
@@ -2399,7 +2529,7 @@ func Test_CheckC2SModEvalPrec(t *testing.T) {
 			work[0] = cts[i-n]
 		}
 		for d := range 2 {
-			// be.ModSwitchQtoP(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
+			// be.ModSwitchQtoP_Old(cts[i].Level(), PLevel, work[0].Value[d], inputPolysC[d][i])
 			be.ModUpQtoP(PLevel, work[0].Value[d], inputPolysC[d][i])
 		}
 	}
@@ -2479,8 +2609,8 @@ func Test_CheckC2SModEvalPrec(t *testing.T) {
 	fmt.Println(resPolys00[0][0])
 	for i := range N {
 		for idx := range 2 {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
 			// ringQ.Mul
 		}
 		if i == 0 {

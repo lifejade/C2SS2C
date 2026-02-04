@@ -2005,7 +2005,7 @@ func Test_C2S_New(t *testing.T) {
 
 	for i := range sparseN {
 		for d := range 2 {
-			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
+			be.ModSwitchQtoP_Old(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 		if i < n {
 			ringQ.Neg(cts[i+n].Value[0], work[0].Value[0])
@@ -2014,7 +2014,7 @@ func Test_C2S_New(t *testing.T) {
 			work[0] = cts[i-n]
 		}
 		for d := range 2 {
-			be.ModSwitchQtoP(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
+			be.ModSwitchQtoP_Old(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
 		}
 	}
 	fmt.Println("mod switch end")
@@ -2086,8 +2086,8 @@ func Test_C2S_New(t *testing.T) {
 
 	for i := range N {
 		for idx := range 2 {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
 		}
 
 		q := rlwe.NewScale(params.Q()[result[i].Level()])
@@ -2493,7 +2493,7 @@ func Test_C2S_New_Check(t *testing.T) {
 
 	for i := range sparseN {
 		for d := range 2 {
-			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
+			be.ModSwitchQtoP_Old(params.MaxLevel(), PLevel, cts[i].Value[d], inputPolys[d][i])
 		}
 		if i < n {
 			ringQ.NTT(cts[i+n].Value[0], work[0].Value[0])
@@ -2505,7 +2505,7 @@ func Test_C2S_New_Check(t *testing.T) {
 			work[0] = cts[i-n]
 		}
 		for d := range 2 {
-			be.ModSwitchQtoP(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
+			be.ModSwitchQtoP_Old(params.MaxLevel(), PLevel, work[0].Value[d], inputPolysC[d][i])
 		}
 
 	}
@@ -2760,8 +2760,8 @@ func Test_C2S_New_Check(t *testing.T) {
 
 	for i := range N {
 		for idx := range 2 {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys00[idx][i], result[i].Value[idx])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), resPolys10[idx][i], result2[i].Value[idx])
 		}
 		ringQ.NTT(result[i].Value[0], result[i].Value[0])
 		ringQ.NTT(result[i].Value[1], result[i].Value[1])

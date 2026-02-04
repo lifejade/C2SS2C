@@ -149,6 +149,22 @@ func Mult_mod_mat_Blas_Inplace(A, B, res []float64, size_a, size_b, size_c, leve
 	)
 }
 
+func Mult_mod_mat_Blas_Inplace2(A, B, res []float64, size_a, size_b, size_c int) {
+	// --- 평탄화 (uint64 -> float64) ---
+	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---
+	// C가 결과를 out에 써줌
+
+	// --- C 호출 (포인터 캐스팅만) ---
+	C.multiply_mod_matrix_blas_Inplace2(
+		(*C.double)(unsafe.Pointer(&A[0])),
+		(*C.double)(unsafe.Pointer(&B[0])),
+		(*C.double)(unsafe.Pointer(&res[0])),
+		C.uint(size_a),
+		C.uint(size_b),
+		C.uint(size_c),
+	)
+}
+
 func Mult_mod_mat_Blas_Inplace_Stride(A, B, res []float64, size_a, size_b, size_c, level, lda, ldb, ldc int) {
 	// --- 평탄화 (uint64 -> float64) ---
 	// --- 결과 버퍼는 Go에서 잡고 포인터만 넘김 ---

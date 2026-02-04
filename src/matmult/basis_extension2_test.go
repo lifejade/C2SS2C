@@ -72,9 +72,9 @@ func Test_Basis2(t *testing.T) {
 		}
 	}
 
-	be.ModSwitchQtoP(1, 3, p1, p2)
+	be.ModSwitchQtoP_Old(1, 3, p1, p2)
 	fmt.Println()
-	be.ModSwitchPtoQ(3, 1, p2, res)
+	be.ModSwitchPtoQ_Old(3, 1, p2, res)
 
 	fmt.Println(p2)
 	fmt.Println(p1)
@@ -200,9 +200,9 @@ func Test_Basis3(t *testing.T) {
 
 		p2 := ringP.NewPoly()
 		starttime := time.Now()
-		be.ModSwitchQtoP(1, 4, ct.Value[i], p2)
+		be.ModSwitchQtoP_Old(1, 4, ct.Value[i], p2)
 		// fmt.Println("TT", p2.Coeffs)
-		be.ModSwitchPtoQ(4, 1, p2, ct.Value[i])
+		be.ModSwitchPtoQ_Old(4, 1, p2, ct.Value[i])
 		elapse := time.Since(starttime)
 		fmt.Println(elapse)
 
@@ -407,14 +407,14 @@ func Test_BasisTime(t *testing.T) {
 	p1 := ringP.NewPoly()
 
 	starttime := time.Now()
-	be.ModSwitchQtoP(level, 20, ct.Value[0], p0)
-	be.ModSwitchQtoP(level, 20, ct.Value[1], p1)
+	be.ModSwitchQtoP_Old(level, 20, ct.Value[0], p0)
+	be.ModSwitchQtoP_Old(level, 20, ct.Value[1], p1)
 	elapse := time.Since(starttime)
 	fmt.Println("Q to P time: ", elapse)
 
 	starttime = time.Now()
-	be.ModSwitchPtoQ(20, level, p0, ct.Value[0])
-	be.ModSwitchPtoQ(20, level, p1, ct.Value[1])
+	be.ModSwitchPtoQ_Old(20, level, p0, ct.Value[0])
+	be.ModSwitchPtoQ_Old(20, level, p1, ct.Value[1])
 	elapse = time.Since(starttime)
 	fmt.Println("P to Q time: ", elapse)
 

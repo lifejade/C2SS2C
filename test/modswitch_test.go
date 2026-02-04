@@ -453,7 +453,7 @@ func Test_ModSwitchTime2(t *testing.T) {
 
 	for idx := range 2 {
 		for i := range rings[idx] {
-			be.ModSwitchQtoP(2, 6, ctIn.Value[idx], rings[idx][i])
+			be.ModSwitchQtoP_Old(2, 6, ctIn.Value[idx], rings[idx][i])
 		}
 	}
 	buffer1 := make([]float64, 7*params.N()*size)
@@ -466,7 +466,7 @@ func Test_ModSwitchTime2(t *testing.T) {
 	fmt.Println(ringP.ModuliChain()[0])
 
 	for idx := range 2 {
-		be.ModSwitchPtoQ(6, 2, rings[idx][0], ctIn.Value[idx])
+		be.ModSwitchPtoQ_Old(6, 2, rings[idx][0], ctIn.Value[idx])
 	}
 	sc := rlwe.NewScale(ringQ.ModuliChain()[2])
 
@@ -1218,7 +1218,7 @@ func Test_ModSwitch_Opt3(t *testing.T) {
 				time_ := time.Now()
 				for idx := range 2 {
 					for i := range size {
-						be.ModSwitchQtoP(startLevel, PLevel, ct.Value[idx], rings[idx][i])
+						be.ModSwitchQtoP_Old(startLevel, PLevel, ct.Value[idx], rings[idx][i])
 					}
 				}
 				elapse_ := time.Since(time_)
@@ -1245,7 +1245,7 @@ func Test_ModSwitch_Opt3(t *testing.T) {
 				for idx := range 2 {
 					for i := range size {
 						_ = i
-						be.ModSwitchPtoQ(PLevel, startLevel, rings[idx][i], ct.Value[idx])
+						be.ModSwitchPtoQ_Old(PLevel, startLevel, rings[idx][i], ct.Value[idx])
 					}
 				}
 				elapse_ = time.Since(time_)
@@ -1457,7 +1457,7 @@ func Test_ModSwitch_Opt4(t *testing.T) {
 				time_ := time.Now()
 				for idx := range 2 {
 					for i := range size {
-						be.ModSwitchQtoP(startLevel, PLevel, ct.Value[idx], rings[idx][i])
+						be.ModSwitchQtoP_Old(startLevel, PLevel, ct.Value[idx], rings[idx][i])
 					}
 				}
 				elapse_ := time.Since(time_)
@@ -1487,7 +1487,7 @@ func Test_ModSwitch_Opt4(t *testing.T) {
 				for idx := range 2 {
 					for i := range size {
 						_ = i
-						be.ModSwitchPtoQ(PLevel, startLevel, rings[idx][i], ct.Value[idx])
+						be.ModSwitchPtoQ_Old(PLevel, startLevel, rings[idx][i], ct.Value[idx])
 					}
 				}
 				elapse_ = time.Since(time_)

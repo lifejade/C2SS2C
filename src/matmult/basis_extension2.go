@@ -247,7 +247,27 @@ func (be *BasisExtender) ModUpQtoP(levelP int, polQ, polP ring.Poly) {
 	// ModUpExact(buffQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
 }
 
-func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP, polQ ring.Poly) {
+func (be *BasisExtender) ModSwitchQtoP_Old(levelQ, levelP int, polQ, polP ring.Poly) {
+
+	// ringQ := be.ringQ.AtLevel(levelQ)
+	// // ringP := be.ringP.AtLevel(levelP)
+	// buffQ := be.buffQ
+
+	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
+	// QHalf.Rsh(QHalf, 1)
+
+	// ringQ.AddScalarBigint(polQ, QHalf, buffQ)
+	polP.Resize(levelP)
+	poltemp := be.buffP
+	poltemp.Resize(levelP)
+	ModUpExact(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+
+	// PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
+	// PHalf.Rsh(PHalf, 1)
+	// ringP.SubScalarBigint(polP, QHalf, polP)
+}
+
+func (be *BasisExtender) ModSwitchPtoQ_Old(levelP, levelQ int, polP, polQ ring.Poly) {
 
 	// ringQ := be.ringQ.AtLevel(levelQ)
 	// ringP := be.ringP.AtLevel(levelP)
@@ -265,22 +285,31 @@ func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP, polQ ring.Poly)
 	// ringQ.SubScalarBigint(polQ, QHalf, polQ)
 }
 
-func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ, polP ring.Poly) {
-
-	// ringQ := be.ringQ.AtLevel(levelQ)
-	// // ringP := be.ringP.AtLevel(levelP)
-	// buffQ := be.buffQ
-
-	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
-	// QHalf.Rsh(QHalf, 1)
-
-	// ringQ.AddScalarBigint(polQ, QHalf, buffQ)
+func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ ring.Poly, polP Poly) {
 	polP.Resize(levelP)
-	ModUpExact(polQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
-	// PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
-	// PHalf.Rsh(PHalf, 1)
-	// ringP.SubScalarBigint(polP, QHalf, polP)
+	poltemp := be.buffP
+	poltemp.Resize(levelP)
+	ModUpExact(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+	for i := range poltemp.Coeffs {
+		for j := range poltemp.Coeffs[i] {
+			polP.Coeffs[i][j] = uint32(poltemp.Coeffs[i][j])
+		}
+	}
 }
+
+func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP Poly, polQ ring.Poly) {
+	poltemp := be.buffP
+	poltemp.Resize(levelP)
+	for i := range poltemp.Coeffs {
+		for j := range poltemp.Coeffs[i] {
+			poltemp.Coeffs[i][j] = uint64(polP.Coeffs[i][j])
+		}
+	}
+	polQ.Resize(levelQ)
+	ModUpExact(poltemp.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
+
+}
+
 func MRed(x, y, q, qInv uint64) (r uint64) {
 	mhi, mlo := bits.Mul64(x, y)
 	hhi, _ := bits.Mul64(mlo*qInv, q)

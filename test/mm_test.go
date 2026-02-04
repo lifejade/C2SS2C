@@ -505,7 +505,7 @@ func Test_PCMM_Inplace(t *testing.T) {
 	}
 	for d := range 2 {
 		for i := range N {
-			be.ModSwitchQtoP(params.MaxLevel(), PLevel, cts[i].Value[d], polys[d][i])
+			be.ModSwitchQtoP_Old(params.MaxLevel(), PLevel, cts[i].Value[d], polys[d][i])
 		}
 	}
 
@@ -537,7 +537,7 @@ func Test_PCMM_Inplace(t *testing.T) {
 
 	for d := range 2 {
 		for i := range N {
-			be.ModSwitchPtoQ(PLevel, params.MaxLevel(), polys[d][i], cts[i].Value[d])
+			be.ModSwitchPtoQ_Old(PLevel, params.MaxLevel(), polys[d][i], cts[i].Value[d])
 
 		}
 	}
