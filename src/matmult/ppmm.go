@@ -891,7 +891,7 @@ func PPMM_Blas_CRT_Stride(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint
 	}
 }
 
-func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride, level int, ringP *ring.Ring, res []Poly, buffer1, buffer2 []float64) {
+func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endpoint, stride, level int, ringP *Ring, res []Poly, buffer1, buffer2 []float64) {
 	P := ringP.ModuliChain()
 	_ = P
 	level = level + 1
@@ -998,7 +998,7 @@ func SubManyRing(r *ring.Ring, p1, p2, p3 [][]ring.Poly) {
 	}
 }
 
-func AddManyRingIdx(r *ring.Ring, p1, p2, p3 []Poly, stpIdx int) {
+func AddManyRingIdx(r *Ring, p1, p2, p3 []Poly, stpIdx int) {
 	l := len(p2)
 	for j := stpIdx; j < stpIdx+l; j++ {
 		for i, s := range r.SubRings[:r.Level()+1] {
@@ -1007,7 +1007,7 @@ func AddManyRingIdx(r *ring.Ring, p1, p2, p3 []Poly, stpIdx int) {
 	}
 }
 
-func SubManyRingIdx(r *ring.Ring, p1, p2, p3 []Poly, stpIdx int) {
+func SubManyRingIdx(r *Ring, p1, p2, p3 []Poly, stpIdx int) {
 	l := len(p2)
 	for j := stpIdx; j < stpIdx+l; j++ {
 		for i, s := range r.SubRings[:r.Level()+1] {

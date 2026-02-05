@@ -49,14 +49,14 @@ func Test_Modup(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
 	PLevel := 33
 	QPratio := new(big.Float).SetFloat64(1)
 	for i := range params.Q() {
 		QPratio.Mul(QPratio, new(big.Float).SetUint64(params.Q()[i]))
 	}
 	for i := range P[:PLevel+1] {
-		QPratio.Quo(QPratio, new(big.Float).SetUint64(P[i]))
+		QPratio.Quo(QPratio, new(big.Float).SetUint64(uint64(P[i])))
 	}
 	fmt.Println(QPratio)
 
@@ -199,7 +199,7 @@ func Test_CoeffToSlotBench(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
 	PLevel := 33
 	// QPratio := new(big.Float).SetFloat64(1)
 	// for i := range params.Q() {
@@ -523,7 +523,7 @@ func Test_CoeffToSlot(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
 	PLevel := 33
 
 	var pk *rlwe.PublicKey
@@ -676,7 +676,7 @@ func Test_SlotToCoeff(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
 	PLevel := 33
 
 	var pk *rlwe.PublicKey
@@ -813,7 +813,7 @@ func Test_CTSSTC(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
 	PLevel := 33
 
 	var pk *rlwe.PublicKey
@@ -942,7 +942,7 @@ func Test_Boot(t *testing.T) {
 	//ckks parameter init
 	SchemeParams := hefloat.ParametersLiteral{
 		LogN:            10,
-		LogQ:            []int{48, 48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 60, 60},
+		LogQ:            []int{48, 60, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 60, 60},
 		LogP:            []int{52},
 		LogDefaultScale: 40,
 	}
@@ -966,8 +966,8 @@ func Test_Boot(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
-	PLevel := 37
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	PLevel := 40
 
 	var pk *rlwe.PublicKey
 	var rlk *rlwe.RelinearizationKey
@@ -1021,7 +1021,7 @@ func Test_Boot(t *testing.T) {
 		LevelStart:      params.MaxLevel() - 2,
 		LogScale:        48,                  // Matches qiEvalMod
 		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
-		Mod1Degree:      31,                  // Depth 5
+		Mod1Degree:      24,                  // Depth 5
 		DoubleAngle:     3,                   // Depth 3
 		K:               8,                   // With EphemeralSecretWeight = 32 and 2^{15} slots, ensures < 2^{-138.7} failure probability
 		LogMessageRatio: 8,                   // q/|m| = 2^10
@@ -1047,7 +1047,7 @@ func Test_Boot(t *testing.T) {
 		Mod1ParametersLiteral:   Mod1ParametersLiteral,
 		CoeffsToSlotsParameters: CoeffsToSlotsParameters,
 		EphemeralSecretWeight:   32, // > 128bit secure for LogN=16 and LogQP = 115.
-		CircuitOrder:            bootstrapping.DecodeThenModUp,
+		CircuitOrder:            bootstrapping.ModUpThenEncode,
 	}
 	btpevk, _, _ := btpParams.GenEvaluationKeys(sk)
 	btp, err := bootstrapping.NewEvaluator(btpParams, btpevk)
@@ -1074,11 +1074,12 @@ func Test_Boot(t *testing.T) {
 		Scaling:    C2SScale,
 		CL_arr:     CL_arr,
 	}
+	S2CScale, _ := btp.SlotsToCoeffsParameters.Scaling.Float64()
 	STCParams := MatmultParamsLiteral{
-		StartLevel: 2,
-		EndLevel:   2,
-		PLevel:     12,
-		Scaling:    1,
+		StartLevel: params.MaxLevel() - 10,
+		EndLevel:   params.MaxLevel() - 10,
+		PLevel:     PLevel,
+		Scaling:    S2CScale,
 		CL_arr:     CL_arr,
 	}
 	context := InitContext(params, encoder, encryptor, N, sparseN, evaluator, P, CTSParams, STCParams)
@@ -1108,8 +1109,8 @@ func Test_Boot(t *testing.T) {
 			plaintext.IsBatched = false
 			encoder.Encode(values_arr[i], plaintext)
 			cts[i], _ = encryptor.EncryptNew(plaintext)
-			// params.RingQ().AtLevel(cts[i].Level()).INTT(cts[i].Value[0], cts[i].Value[0])
-			// params.RingQ().AtLevel(cts[i].Level()).INTT(cts[i].Value[1], cts[i].Value[1])
+			params.RingQ().AtLevel(cts[i].Level()).INTT(cts[i].Value[0], cts[i].Value[0])
+			params.RingQ().AtLevel(cts[i].Level()).INTT(cts[i].Value[1], cts[i].Value[1])
 		}()
 	}
 	wg.Wait()
@@ -1117,28 +1118,35 @@ func Test_Boot(t *testing.T) {
 	fmt.Println("ct gen end")
 	fmt.Println("N, SparseN, Ratio, CL_Arr : ", N, ", ", sparseN, ", ", ratio, ", ", CL_arr)
 	fmt.Println("MaxLevel, PLevel : ", params.MaxLevel(), PLevel)
-	// ringP, _ := ring.NewRing(params.N(), P)
-
-	// Q := params.RingQ().ModulusAtLevel[params.MaxLevel()]
-	// Q.Div(Q, ringP.ModulusAtLevel[PLevel])
-	// fmt.Println("Q/P ratio 1 : ", Q)
-	// Q = params.RingQ().ModulusAtLevel[2]
-	// Q.Div(Q, ringP.ModulusAtLevel[STCParams.StartLevel])
-	// fmt.Println("Q/P ratio 2 : ", Q)
-	// fmt.Println()
-	res := make([]float64, N/2)
+	ringP, err := matmult.NewRing(params.N(), P)
+	if err != nil {
+		panic(err)
+	}
+	QP := new(big.Float).SetInt(params.RingQ().ModulusAtLevel[params.MaxLevel()])
+	QP = QP.Quo(QP, new(big.Float).SetInt(ringP.ModulusAtLevel[PLevel]))
+	fmt.Println("Q/P ratio 1 : ", QP)
+	QP = new(big.Float).SetInt(params.RingQ().ModulusAtLevel[CTSParams.StartLevel])
+	QP = QP.Quo(QP, new(big.Float).SetInt(ringP.ModulusAtLevel[STCParams.PLevel]))
+	fmt.Println("Q/P ratio 2 : ", QP)
+	fmt.Println()
+	res := make([]float64, N)
 
 	runtime.GC()
 	runtime.GOMAXPROCS(1)
-	result := context.SlotToCoeff2(cts, nil)
+	result := make([]*rlwe.Ciphertext, sparseN)
+	for i := range result {
+		result[i] = cts[i].CopyNew()
+	}
 	ModUp(result, params, encoder, encryptor, evaluator, N, sparseN, 32, result)
 	result1, result2 := context.CoeffToSlot2(result)
 	for i := range result1 {
-		result1[i], _ = btp.EvalMod(result1[i])
+		result1[i], err = btp.EvalMod(result1[i])
 		result2[i], _ = btp.EvalMod(result2[i])
-		evaluator.Mul(result2[i], 1i, result2[i])
-		evaluator.Add(result1[i], result2[i], result1[i])
+		if err != nil {
+			panic(err)
+		}
 	}
+	result1 = context.SlotToCoeff2(result1, result2)
 
 	fmt.Println()
 	fmt.Println("#############################################################")
@@ -1153,10 +1161,10 @@ func Test_Boot(t *testing.T) {
 	util.DebugPrec(result1, params, encoder, decryptor, values_arr, 1, false)
 	// util.DebugPrec(result2, params, encoder, decryptor, values_arr, 1, false)
 
-	// for i := range cts {
-	// 	params.RingQ().AtLevel(cts[i].Level()).NTT(cts[i].Value[0], cts[i].Value[0])
-	// 	params.RingQ().AtLevel(cts[i].Level()).NTT(cts[i].Value[1], cts[i].Value[1])
-	// }
+	for i := range cts {
+		params.RingQ().AtLevel(cts[i].Level()).NTT(cts[i].Value[0], cts[i].Value[0])
+		params.RingQ().AtLevel(cts[i].Level()).NTT(cts[i].Value[1], cts[i].Value[1])
+	}
 
 	starttime := time.Now()
 	for i := range cts {
@@ -1178,17 +1186,17 @@ func Test_BootBench(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	logN := 15
-	sparses := []int{10, 11, 12}
-	lenCL := []int{1}
-	k := 2
+	sparses := []int{10, 11, 12, 13}
+	lenCL := []int{2}
+	k := 1
 	// sparses := []int{5}
 	// lenCL := []int{2}
 
 	//ckks parameter init
 	SchemeParams := hefloat.ParametersLiteral{
 		LogN:            logN,
-		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 60},
-		LogP:            []int{52, 52, 52},
+		LogQ:            []int{48, 48, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48},
+		LogP:            []int{52},
 		LogDefaultScale: 40,
 	}
 
@@ -1208,8 +1216,9 @@ func Test_BootBench(t *testing.T) {
 
 	galLen := 1
 
-	P := []uint64{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
-	PLevel := 33
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	PLevel := 40
+	P = P[:PLevel+1]
 	// QPratio := new(big.Float).SetFloat64(1)
 	// for i := range params.Q() {
 	// 	QPratio.Mul(QPratio, new(big.Float).SetUint64(params.Q()[i]))
@@ -1263,14 +1272,14 @@ func Test_BootBench(t *testing.T) {
 		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
 		LogSlots:     params.LogMaxSlots(),
 		LevelStart:   params.MaxLevel(),
-		Levels:       []int{1}, //qiCoeffsToSlots
+		Levels:       []int{1, 1}, //qiCoeffsToSlots
 		LogBSGSRatio: 0,
 		BitReversed:  false,
 	}
 
 	// Parameters of the homomorphic modular reduction x mod 1
 	Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
-		LevelStart:      params.MaxLevel() - 1,
+		LevelStart:      params.MaxLevel() - 2,
 		LogScale:        48,                  // Matches qiEvalMod
 		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
 		Mod1Degree:      24,                  // Depth 5
@@ -1284,8 +1293,8 @@ func Test_BootBench(t *testing.T) {
 	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
 		Type:         hefloat.HomomorphicDecode,
 		LogSlots:     params.LogMaxSlots(),
-		LevelStart:   params.MaxLevel() - 9,
-		Levels:       []int{1}, // qiSlotsToCoeffs
+		LevelStart:   params.MaxLevel() - 10,
+		Levels:       []int{1, 1}, // qiSlotsToCoeffs
 		LogBSGSRatio: 0,
 		BitReversed:  false,
 	}
@@ -1298,7 +1307,7 @@ func Test_BootBench(t *testing.T) {
 		SlotsToCoeffsParameters: SlotsToCoeffsParameters,
 		Mod1ParametersLiteral:   Mod1ParametersLiteral,
 		CoeffsToSlotsParameters: CoeffsToSlotsParameters,
-		EphemeralSecretWeight:   0, // > 128bit secure for LogN=16 and LogQP = 115.
+		EphemeralSecretWeight:   32, // > 128bit secure for LogN=16 and LogQP = 115.
 		CircuitOrder:            bootstrapping.Custom,
 	}
 	btpevk, _, _ := btpParams.GenEvaluationKeys(sk)
@@ -1369,9 +1378,9 @@ func Test_BootBench(t *testing.T) {
 					CL_arr:     CL_arr,
 				}
 				STCParams := MatmultParamsLiteral{
-					StartLevel: params.MaxLevel() - 9,
-					EndLevel:   params.MaxLevel() - 9,
-					PLevel:     PLevel - 0,
+					StartLevel: params.MaxLevel() - 10,
+					EndLevel:   params.MaxLevel() - 10,
+					PLevel:     PLevel,
 					Scaling:    1,
 					CL_arr:     CL_arr,
 				}
@@ -1413,25 +1422,36 @@ func Boot_Testing(context *Context, cts []*rlwe.Ciphertext, btp *bootstrapping.E
 	fmt.Println("MaxLevel, PLevel : ", params.MaxLevel(), PLevel)
 	fmt.Println()
 
+	// for i := range cts {
+	// 	evaluator.DropLevel(cts[i], cts[i].Level()-len(CL_arr))
+	// }
+
 	runtime.GC()
 	runtime.GOMAXPROCS(1)
-	result := context.SlotToCoeff2(cts, nil)
+	result := make([]*rlwe.Ciphertext, sparseN)
+	for i := range result {
+		result[i] = cts[i].CopyNew()
+	}
 	ModUp(result, params, encoder, encryptor, evaluator, N, sparseN, 32, result)
 	result1, result2 := context.CoeffToSlot2(result)
 	starttime := time.Now()
 	for i := range result1 {
 		result1[i], err = btp.EvalMod(result1[i])
 		result2[i], _ = btp.EvalMod(result2[i])
+		if err != nil {
+			panic(err)
+		}
 	}
 	elapse := time.Since(starttime)
 	fmt.Println("ModEval : ", elapse)
 	util.Debug.AccTime += elapse
+	result1 = context.SlotToCoeff2(result1, result2)
 
 	fmt.Println()
 	fmt.Println("#############################################################")
 	fmt.Println("Our Total Elapse : ", util.Debug.AccTime)
 
-	util.DebugPrec(result, params, encoder, decryptor, util.SContext.Values, 1, false)
+	util.DebugPrec(result1, params, encoder, decryptor, util.SContext.Values, 1, false)
 	fmt.Println("#############################################################")
 	if !isOriginTest {
 		return
@@ -1465,8 +1485,8 @@ func Test_Boottime(t *testing.T) {
 	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
 	SchemeParams := hefloat.ParametersLiteral{
 		LogN:            15,
-		LogQ:            []int{48, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 40},
-		LogP:            []int{52},
+		LogQ:            []int{48, 40, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
+		LogP:            []int{52, 52},
 		LogDefaultScale: 40,
 	}
 	params, _ := hefloat.NewParametersFromLiteral(SchemeParams)
@@ -1481,13 +1501,13 @@ func Test_Boottime(t *testing.T) {
 		Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
 		LogSlots:     params.LogMaxSlots(),
 		LevelStart:   params.MaxLevel(),
-		Levels:       []int{1}, //qiCoeffsToSlots
+		Levels:       []int{1, 1}, //qiCoeffsToSlots
 		LogBSGSRatio: 0,
 	}
 
 	// Parameters of the homomorphic modular reduction x mod 1
 	Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
-		LevelStart:      params.MaxLevel() - 1,
+		LevelStart:      params.MaxLevel() - 2,
 		LogScale:        48,                  // Matches qiEvalMod
 		Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
 		Mod1Degree:      24,                  // Depth 5
@@ -1501,8 +1521,8 @@ func Test_Boottime(t *testing.T) {
 	SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
 		Type:         hefloat.HomomorphicDecode,
 		LogSlots:     params.LogMaxSlots(),
-		LevelStart:   params.MaxLevel() - 9,
-		Levels:       []int{1}, // qiSlotsToCoeffs
+		LevelStart:   params.MaxLevel() - 10,
+		Levels:       []int{1, 1}, // qiSlotsToCoeffs
 		LogBSGSRatio: 0,
 	}
 
@@ -1575,11 +1595,12 @@ func Test_Boottime(t *testing.T) {
 
 	value := make([]float64, 2*n)
 	for i := range value {
-		value[i] = 0.001 * float64(i)
+		value[i] = 0.00001 * float64(i)
 	}
 
 	pt := hefloat.NewPlaintext(params, 0)
 	pt.IsBatched = false
+	encoder.Encode(value, pt)
 
 	ct, _ := encryptor.EncryptNew(pt)
 	runtime.GOMAXPROCS(1)
@@ -1587,8 +1608,12 @@ func Test_Boottime(t *testing.T) {
 	ct, _ = btp.Bootstrap(ct)
 	elapse = time.Since(starttime)
 	fmt.Println(elapse)
+
 	dept := decryptor.DecryptNew(ct)
-	encoder.Decode(dept, value)
+	value2 := make([]float64, 2*n)
+	encoder.Decode(dept, value2)
+	fmt.Println(value2[:20])
+
 	fmt.Println(value[:20])
 	util.DebugPrec([]*rlwe.Ciphertext{ct}, params, encoder, decryptor, [][]float64{value}, 1, false)
 }

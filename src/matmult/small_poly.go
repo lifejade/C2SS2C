@@ -5,15 +5,10 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/tuneinsight/lattigo/v5/ring"
 	"github.com/tuneinsight/lattigo/v5/utils"
 	"github.com/tuneinsight/lattigo/v5/utils/buffer"
 	"github.com/tuneinsight/lattigo/v5/utils/structs"
 )
-
-func NewPoly(r *ring.Ring) Poly {
-	return newPoly(r.N(), r.Level())
-}
 
 // Poly is the structure that contains the coefficients of a polynomial.
 type Poly struct {

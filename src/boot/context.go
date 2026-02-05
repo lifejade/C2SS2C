@@ -21,7 +21,7 @@ type Context struct {
 
 	N       int
 	SparseN int
-	P       []uint64
+	P       []uint32
 
 	C2SParams *MatmultParams
 	S2CParams *MatmultParams
@@ -47,7 +47,7 @@ type MatmultParamsLiteral struct {
 
 type preAlloced struct {
 	ringQ *ring.Ring
-	ringP *ring.Ring
+	ringP *matmult.Ring
 	be    *matmult.BasisExtender
 
 	ctzero *rlwe.Ciphertext
@@ -71,7 +71,7 @@ type preAlloced struct {
 	resPolys [][]matmult.Poly
 }
 
-func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint64, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
+func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
 	context = &Context{
 		params:    params,
 		Encoder:   Encoder,
@@ -98,7 +98,7 @@ func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor 
 	return context
 }
 
-func InitContextLowMem(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint64, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
+func InitContextLowMem(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
 	context = &Context{
 		params:    params,
 		Encoder:   Encoder,
@@ -133,20 +133,20 @@ func (context *Context) ContextPreAlloc() {
 	sparseN := context.SparseN
 	P := context.P
 	ringQ := params.RingQ()
-	ringP, _ := ring.NewRing(N, P)
+	ringP, _ := matmult.NewRing(N, P)
 
 	inputPolys := make([][]matmult.Poly, 2)
 	for i := range inputPolys {
 		inputPolys[i] = make([]matmult.Poly, sparseN)
 		for j := range inputPolys[i] {
-			inputPolys[i][j] = matmult.NewPoly(ringP)
+			inputPolys[i][j] = ringP.NewPoly()
 		}
 	}
 	resPolys := make([][]matmult.Poly, 2)
 	for i := range 2 {
 		resPolys[i] = make([]matmult.Poly, sparseN)
 		for j := range sparseN {
-			resPolys[i][j] = matmult.NewPoly(ringP)
+			resPolys[i][j] = ringP.NewPoly()
 		}
 	}
 
@@ -158,9 +158,9 @@ func (context *Context) ContextPreAlloc() {
 		imagPolys = make([]matmult.Poly, sparseN/2)
 		tempPolys = make([]matmult.Poly, sparseN/2)
 		for j := range sparseN / 2 {
-			realPolys[j] = matmult.NewPoly(ringP)
-			imagPolys[j] = matmult.NewPoly(ringP)
-			tempPolys[j] = matmult.NewPoly(ringP)
+			realPolys[j] = ringP.NewPoly()
+			imagPolys[j] = ringP.NewPoly()
+			tempPolys[j] = ringP.NewPoly()
 		}
 	}
 
@@ -289,7 +289,7 @@ func (context *Context) GenMatParams(param MatmultParamsLiteral, mat [][][]compl
 						for i := range llen {
 							for j := range llen {
 								idx := q*llen*llen + i*llen + j
-								mat0s[l][t][idx] = float64(uint64(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
+								mat0s[l][t][idx] = float64(uint32(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
 							}
 						}
 					}
@@ -352,7 +352,7 @@ func (context *Context) GenMatParams(param MatmultParamsLiteral, mat [][][]compl
 						for i := range llen {
 							for j := range llen {
 								idx := q*llen*llen + i*llen + j
-								mat0s[l][t][idx] = float64(uint64(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
+								mat0s[l][t][idx] = float64(uint32(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
 							}
 						}
 					}
@@ -474,7 +474,7 @@ func (context *Context) GenMatParams2(param MatmultParamsLiteral, mat [][]comple
 					for i := range llen {
 						for j := range llen {
 							idx := q*llen*llen + i*llen + j
-							mat0s[l][t][idx] = float64(uint64(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
+							mat0s[l][t][idx] = float64(uint32(mat0i[l][t][idx]+mat0[l][t][idx]+0.5) % P[q])
 						}
 					}
 				}

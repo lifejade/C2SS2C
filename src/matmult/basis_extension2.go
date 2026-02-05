@@ -13,11 +13,11 @@ import (
 // The used algorithm is from https://eprint.iacr.org/2018/117.pdf.
 type BasisExtender struct {
 	ringQ            *ring.Ring
-	ringP            *ring.Ring
+	ringP            *Ring
 	dicConstantsQtoP map[Key]ModUpConstants
 	dicConstantsPtoQ map[Key]ModUpConstants
 	buffQ            ring.Poly
-	buffP            ring.Poly
+	buffP            Poly
 }
 
 type Key struct {
@@ -25,8 +25,12 @@ type Key struct {
 	To   int
 }
 
+type Int interface {
+	~uint32 | ~uint64
+}
+
 // NewBasisExtender creates a new BasisExtender, enabling RNS basis extension from Q to P and P to Q.
-func NewBasisExtender(ringQ, ringP *ring.Ring, QtoP, PtoQ []Key) (be *BasisExtender) {
+func NewBasisExtender(ringQ *ring.Ring, ringP *Ring, QtoP, PtoQ []Key) (be *BasisExtender) {
 	be = new(BasisExtender)
 
 	be.ringQ = ringQ
@@ -81,7 +85,7 @@ type ModUpConstants struct {
 }
 
 // GenModUpConstants generates the ModUpConstants for basis extension from Q to P and P to Q.
-func GenModUpConstants(Q, P []uint64) ModUpConstants {
+func GenModUpConstants[T1, T2 Int](Q []T1, P []T2) ModUpConstants {
 
 	bredQ := make([][]uint64, len(Q))
 	mredQ := make([]uint64, len(Q))
@@ -89,13 +93,13 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 	mredP := make([]uint64, len(P))
 
 	for i := range Q {
-		bredQ[i] = ring.BRedConstant(Q[i])
-		mredQ[i] = ring.MRedConstant(Q[i])
+		bredQ[i] = ring.BRedConstant(uint64(Q[i]))
+		mredQ[i] = ring.MRedConstant(uint64(Q[i]))
 	}
 
 	for i := range P {
-		bredP[i] = ring.BRedConstant(P[i])
-		mredP[i] = ring.MRedConstant(P[i])
+		bredP[i] = ring.BRedConstant(uint64(P[i]))
+		mredP[i] = ring.MRedConstant(uint64(P[i]))
 	}
 	qoverqiinvqi := make([]uint64, len(Q))
 	alphaimodp := make([][]uint64, len(P))
@@ -106,12 +110,12 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 
 	var qiStar uint64
 	for i, qi := range Q {
-
+		qi := uint64(qi)
 		qiStar = ring.MForm(1, qi, bredQ[i])
 
 		for j := 0; j < len(Q); j++ {
 			if j != i {
-				qiStar = ring.MRed(qiStar, ring.MForm(Q[j], qi, bredQ[i]), qi, mredQ[i])
+				qiStar = ring.MRed(qiStar, ring.MForm(uint64(Q[j]), qi, bredQ[i]), qi, mredQ[i])
 			}
 		}
 
@@ -122,7 +126,7 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 	// fmt.Println(QQ, RQ)
 	for j := range Q {
 		temp := new(big.Float)
-		temp = temp.Quo(new(big.Float).SetInt(RQ[j]), new(big.Float).SetUint64((Q[j])))
+		temp = temp.Quo(new(big.Float).SetInt(RQ[j]), new(big.Float).SetUint64(uint64(Q[j])))
 
 		// biggerthanhalf := uint64(0)
 		// // fmt.Println(betaioverqi)
@@ -136,8 +140,8 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 		for i := range P {
 			value := new(big.Int)
 			// value.Add(QQ[j], new(big.Int).SetUint64(biggerthanhalf))
-			value.Mod(QQ[j], new(big.Int).SetUint64(P[i]))
-			alphaimodp[i][j] = ring.MForm(value.Uint64(), P[i], bredP[i])
+			value.Mod(QQ[j], new(big.Int).SetUint64(uint64(P[i])))
+			alphaimodp[i][j] = ring.MForm(value.Uint64(), uint64(P[i]), bredP[i])
 			// fmt.Println("alpha non Mform", value.Uint64())
 			// fmt.Println("alpha Mform", alphaimodp[i][j], " of ", P[i])
 		}
@@ -146,7 +150,7 @@ func GenModUpConstants(Q, P []uint64) ModUpConstants {
 	return ModUpConstants{qoverqiinvqi: qoverqiinvqi, alphaimodp: alphaimodp, betaioverqi: betaioverqi}
 }
 
-func ProductDivModBig(ps_ []uint64, qi_ []uint64) (Q, R []*big.Int) {
+func ProductDivModBig[T1, T2 Int](ps_ []T1, qi_ []T2) (Q, R []*big.Int) {
 
 	// 몫(Q)과 나머지(R)를 저장할 슬라이스를 초기화합니다.
 	Q = make([]*big.Int, len(qi_))
@@ -166,25 +170,25 @@ func ProductDivModBig(ps_ []uint64, qi_ []uint64) (Q, R []*big.Int) {
 			tempR := new(big.Int)
 			if j == 0 {
 				// ps의 첫 번째 요소일 경우, p * 1을 q로 나눕니다.
-				tempMul.Mul(new(big.Int).SetUint64(p), big.NewInt(1))
-				tempQ.Div(tempMul, new(big.Int).SetUint64(q))
-				tempR.Mod(tempMul, new(big.Int).SetUint64(q))
+				tempMul.Mul(new(big.Int).SetUint64(uint64(p)), big.NewInt(1))
+				tempQ.Div(tempMul, new(big.Int).SetUint64(uint64(q)))
+				tempR.Mod(tempMul, new(big.Int).SetUint64(uint64(q)))
 
 				// 첫 번째 몫과 나머지를 Q[i]와 R[i]에 할당합니다.
 				Q[i].Set(tempQ)
 				R[i].Set(tempR)
 			} else {
 				// ps의 두 번째 요소부터는 (p * 이전 나머지)를 q로 나눕니다.
-				tempMul.Mul(new(big.Int).SetUint64(p), R[i])
-				tempQ.Div(tempMul, new(big.Int).SetUint64(q))
-				tempR.Mod(tempMul, new(big.Int).SetUint64(q))
+				tempMul.Mul(new(big.Int).SetUint64(uint64(p)), R[i])
+				tempQ.Div(tempMul, new(big.Int).SetUint64(uint64(q)))
+				tempR.Mod(tempMul, new(big.Int).SetUint64(uint64(q)))
 
 				// R[i]를 업데이트합니다.
 				R[i].Set(tempR)
 
 				// Q[i]를 업데이트합니다: Q[i] = Q[i] * p + tempQ
 				// 참고: 원본 uint64 코드의 Q[i]*p + Q_ 로직을 그대로 옮겼습니다.
-				Q[i].Mul(Q[i], new(big.Int).SetUint64(p))
+				Q[i].Mul(Q[i], new(big.Int).SetUint64(uint64(p)))
 				Q[i].Add(Q[i], tempQ)
 			}
 
@@ -211,42 +215,43 @@ func (be *BasisExtender) ShallowCopy() *BasisExtender {
 	}
 }
 
-func (be *BasisExtender) ModUpQtoP(levelP int, polQ, polP ring.Poly) {
-	// if polQ.Level() != 0 {
-	// 	panic("nope, level must be 0")
-	// }
+// func (be *BasisExtender) ModUpQtoP(levelP int, polQ, polP ring.Poly) {
+// 	// if polQ.Level() != 0 {
+// 	// 	panic("nope, level must be 0")
+// 	// }
 
-	ringQ := be.ringQ
-	ringP := be.ringP.AtLevel(levelP)
-	// buffQ := be.ringQ.NewPoly()
+// 	ringQ := be.ringQ
+// 	ringP := be.ringP.AtLevel(levelP)
+// 	// buffQ := be.ringQ.NewPoly()
 
-	Q := ringQ.ModuliChain()
-	q := Q[0]
-	// levelQ := len(Q) - 1
-	// levelQ := 0
-	P := ringP.ModuliChain()
-	QHalf := q >> 1
-	N := ringQ.N()
-	var pos, neg, tmp uint64
-	for j := 0; j < N; j++ {
-		coeff := polQ.Coeffs[0][j]
-		pos, neg = 1, 0
-		if coeff > QHalf {
-			coeff = q - coeff
-			pos, neg = 0, 1
-		}
+// 	Q := ringQ.ModuliChain()
+// 	q := Q[0]
+// 	// levelQ := len(Q) - 1
+// 	// levelQ := 0
+// 	P := ringP.ModuliChain()
+// 	QHalf := q >> 1
+// 	N := ringQ.N()
+// 	var pos, neg, tmp uint64
+// 	for j := 0; j < N; j++ {
+// 		coeff := polQ.Coeffs[0][j]
+// 		pos, neg = 1, 0
+// 		if coeff > QHalf {
+// 			coeff = q - coeff
+// 			pos, neg = 0, 1
+// 		}
 
-		for i := 0; i < levelP+1; i++ {
-			tmp = coeff % P[i]
-			polP.Coeffs[i][j] = tmp*pos + (P[i]-tmp)*neg
-			// polP.Coeffs[i][j] = coeff % P[i]
-		}
+// 		for i := 0; i < levelP+1; i++ {
+// 			tmp = coeff % P[i]
+// 			polP.Coeffs[i][j] = tmp*pos + (P[i]-tmp)*neg
+// 			// polP.Coeffs[i][j] = coeff % P[i]
+// 		}
 
-	}
+// 	}
 
-	// ModUpExact(buffQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
-}
+// 	// ModUpExact(buffQ.Coeffs[:levelQ+1], polP.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+// }
 
+// nor work
 func (be *BasisExtender) ModSwitchQtoP_Old(levelQ, levelP int, polQ, polP ring.Poly) {
 
 	// ringQ := be.ringQ.AtLevel(levelQ)
@@ -260,7 +265,7 @@ func (be *BasisExtender) ModSwitchQtoP_Old(levelQ, levelP int, polQ, polP ring.P
 	polP.Resize(levelP)
 	poltemp := be.buffP
 	poltemp.Resize(levelP)
-	ModUpExact(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+	// ModUpExact(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
 
 	// PHalf := bignum.NewInt(ringP.ModulusAtLevel[levelP])
 	// PHalf.Rsh(PHalf, 1)
@@ -278,7 +283,7 @@ func (be *BasisExtender) ModSwitchPtoQ_Old(levelP, levelQ int, polP, polQ ring.P
 
 	// ringP.AddScalarBigint(polP, PHalf, buffP)
 	polQ.Resize(levelQ)
-	ModUpExact(polP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
+	// ModUpExact(polP.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
 
 	// QHalf := bignum.NewInt(ringQ.ModulusAtLevel[levelQ])
 	// QHalf.Rsh(QHalf, 1)
@@ -289,10 +294,10 @@ func (be *BasisExtender) ModSwitchQtoP(levelQ, levelP int, polQ ring.Poly, polP 
 	polP.Resize(levelP)
 	poltemp := be.buffP
 	poltemp.Resize(levelP)
-	ModUpExact(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
+	ModUpExactQP(polQ.Coeffs[:levelQ+1], poltemp.Coeffs[:levelP+1], be.ringQ, be.ringP, be.dicConstantsQtoP[Key{levelQ, levelP}])
 	for i := range poltemp.Coeffs {
 		for j := range poltemp.Coeffs[i] {
-			polP.Coeffs[i][j] = uint32(poltemp.Coeffs[i][j])
+			polP.Coeffs[i][j] = (poltemp.Coeffs[i][j])
 		}
 	}
 }
@@ -302,11 +307,11 @@ func (be *BasisExtender) ModSwitchPtoQ(levelP, levelQ int, polP Poly, polQ ring.
 	poltemp.Resize(levelP)
 	for i := range poltemp.Coeffs {
 		for j := range poltemp.Coeffs[i] {
-			poltemp.Coeffs[i][j] = uint64(polP.Coeffs[i][j])
+			poltemp.Coeffs[i][j] = polP.Coeffs[i][j]
 		}
 	}
 	polQ.Resize(levelQ)
-	ModUpExact(poltemp.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
+	ModUpExactPQ(poltemp.Coeffs[:levelP+1], polQ.Coeffs[:levelQ+1], be.ringP, be.ringQ, be.dicConstantsPtoQ[Key{levelP, levelQ}])
 
 }
 
@@ -322,7 +327,7 @@ func MRed(x, y, q, qInv uint64) (r uint64) {
 
 // ModUpExact takes p1 mod Q and switches its basis to P, returning the result on p2.
 // Caution: values are not centered and returned values are in [0, 2P-1].
-func ModUpExact(p1, p2 [][]uint64, ringQ, ringP *ring.Ring, MUC ModUpConstants) {
+func ModUpExactQP(p1 [][]uint64, p2 [][]uint32, ringQ *ring.Ring, ringP *Ring, MUC ModUpConstants) {
 
 	var rlo, rhi [8]uint64
 	var y0, y1, y2, y3, y4, y5, y6, y7 [64]uint64
@@ -343,15 +348,44 @@ func ModUpExact(p1, p2 [][]uint64, ringQ, ringP *ring.Ring, MUC ModUpConstants) 
 	betaioverqi := MUC.betaioverqi
 	// We loop over each coefficient and apply the basis extension
 	for x := 0; x < len(p1[0]); x = x + 8 {
-		reconstructRNS(0, levelQ+1, x, p1, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, Q, mredQ, qoverqiinvqi)
+		reconstructRNS64(0, levelQ+1, x, p1, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, Q, mredQ, qoverqiinvqi)
 		for j := 0; j < levelP+1; j++ {
 			/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2[j])%8 != 0*/
-			multSum(levelQ, (*[8]uint64)(unsafe.Pointer(&p2[j][x])), &rlo, &rhi, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, P[j], mredP[j], bredP[j][0], alphaimodp[j], betaioverqi)
+			multSum32(levelQ, (*[8]uint32)(unsafe.Pointer(&p2[j][x])), &rlo, &rhi, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, uint64(P[j]), mredP[j], bredP[j][0], alphaimodp[j], betaioverqi)
 		}
 	}
 }
 
-func reconstructRNS(start, end, x int, p [][]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, Q, QInv, QbMont []uint64) {
+func ModUpExactPQ(p1 [][]uint32, p2 [][]uint64, ringQ *Ring, ringP *ring.Ring, MUC ModUpConstants) {
+
+	var rlo, rhi [8]uint64
+	var y0, y1, y2, y3, y4, y5, y6, y7 [64]uint64
+
+	levelQ := len(p1) - 1
+	levelP := len(p2) - 1
+
+	Q := ringQ.ModuliChain()
+	mredQ := ringQ.MRedConstants()
+	// fmt.Println(mredQ)
+
+	P := ringP.ModuliChain()
+	mredP := ringP.MRedConstants()
+	bredP := ringP.BRedConstants()
+
+	qoverqiinvqi := MUC.qoverqiinvqi
+	alphaimodp := MUC.alphaimodp
+	betaioverqi := MUC.betaioverqi
+	// We loop over each coefficient and apply the basis extension
+	for x := 0; x < len(p1[0]); x = x + 8 {
+		reconstructRNS32(0, levelQ+1, x, p1, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, Q, mredQ, qoverqiinvqi)
+		for j := 0; j < levelP+1; j++ {
+			/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p2[j])%8 != 0*/
+			multSum(levelQ, (*[8]uint64)(unsafe.Pointer(&p2[j][x])), &rlo, &rhi, &y0, &y1, &y2, &y3, &y4, &y5, &y6, &y7, (P[j]), mredP[j], bredP[j][0], alphaimodp[j], betaioverqi)
+		}
+	}
+}
+
+func reconstructRNS64(start, end, x int, p [][]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, Q, QInv, QbMont []uint64) {
 	var qi, qiInv, qoverqiinvqi uint64
 	_ = p[end-1][x+7] // p의 각 행에 최소 8개가 있다는 가정 이미 있으니 힌트용
 	_ = (*y0)[end-1]
@@ -382,14 +416,35 @@ func reconstructRNS(start, end, x int, p [][]uint64, y0, y1, y2, y3, y4, y5, y6,
 	}
 }
 
-func montLazyAdd(hi, lo, si, q, qInv uint64) uint64 {
-	// t = (lo * qInv) * q;  hhi = high64(t)
-	hhi, _ := bits.Mul64(lo*qInv, q)
-	x := hi - hhi + q + si
-	if x >= q {
-		x -= q
+func reconstructRNS32(start, end, x int, p [][]uint32, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, Q []uint32, QInv, QbMont []uint64) {
+	var qi, qiInv, qoverqiinvqi uint64
+	_ = p[end-1][x+7] // p의 각 행에 최소 8개가 있다는 가정 이미 있으니 힌트용
+	_ = (*y0)[end-1]
+	_ = (*y1)[end-1]
+	_ = (*y2)[end-1]
+	_ = (*y3)[end-1]
+	_ = (*y4)[end-1]
+	_ = (*y5)[end-1]
+	_ = (*y6)[end-1]
+	_ = (*y7)[end-1]
+
+	for i, j := start, 0; i < end; i, j = i+1, j+1 {
+		qoverqiinvqi = QbMont[i]
+		qi = uint64(Q[i])
+		qiInv = QInv[i]
+
+		/* #nosec G103 -- behavior and consequences well understood, possible buffer overflow if len(p[i])%8 != 0 */
+		pTmp := (*[8]uint32)(unsafe.Pointer(&p[i][x]))
+
+		y0[j] = MRed(uint64(pTmp[0]), qoverqiinvqi, qi, qiInv)
+		y4[j] = MRed(uint64(pTmp[4]), qoverqiinvqi, qi, qiInv)
+		y1[j] = MRed(uint64(pTmp[1]), qoverqiinvqi, qi, qiInv)
+		y5[j] = MRed(uint64(pTmp[5]), qoverqiinvqi, qi, qiInv)
+		y2[j] = MRed(uint64(pTmp[2]), qoverqiinvqi, qi, qiInv)
+		y6[j] = MRed(uint64(pTmp[6]), qoverqiinvqi, qi, qiInv)
+		y3[j] = MRed(uint64(pTmp[3]), qoverqiinvqi, qi, qiInv)
+		y7[j] = MRed(uint64(pTmp[7]), qoverqiinvqi, qi, qiInv)
 	}
-	return x
 }
 
 // Caution, returns the values in [0, 2q-1]
@@ -506,12 +561,156 @@ func multSum(level int, res, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7
 	s0, _ = bits.Mul64(si[7], bredP)
 	si[7] = si[7] - s0*q
 
-	res[0] = montLazyAdd(rhi[0], rlo[0], si[0], q, qInv)
-	res[4] = montLazyAdd(rhi[4], rlo[4], si[4], q, qInv)
-	res[1] = montLazyAdd(rhi[1], rlo[1], si[1], q, qInv)
-	res[5] = montLazyAdd(rhi[5], rlo[5], si[5], q, qInv)
-	res[2] = montLazyAdd(rhi[2], rlo[2], si[2], q, qInv)
-	res[6] = montLazyAdd(rhi[6], rlo[6], si[6], q, qInv)
-	res[3] = montLazyAdd(rhi[3], rlo[3], si[3], q, qInv)
-	res[7] = montLazyAdd(rhi[7], rlo[7], si[7], q, qInv)
+	res[0] = montLazyAdd64(rhi[0], rlo[0], si[0], q, qInv)
+	res[4] = montLazyAdd64(rhi[4], rlo[4], si[4], q, qInv)
+	res[1] = montLazyAdd64(rhi[1], rlo[1], si[1], q, qInv)
+	res[5] = montLazyAdd64(rhi[5], rlo[5], si[5], q, qInv)
+	res[2] = montLazyAdd64(rhi[2], rlo[2], si[2], q, qInv)
+	res[6] = montLazyAdd64(rhi[6], rlo[6], si[6], q, qInv)
+	res[3] = montLazyAdd64(rhi[3], rlo[3], si[3], q, qInv)
+	res[7] = montLazyAdd64(rhi[7], rlo[7], si[7], q, qInv)
+}
+
+// Caution, returns the values in [0, 2q-1]
+func multSum32(level int, res *[8]uint32, rlo, rhi *[8]uint64, y0, y1, y2, y3, y4, y5, y6, y7 *[64]uint64, q, qInv uint64, bredP uint64, alphaimodp []uint64, betaioverqi []float64) {
+	var qqip uint64
+
+	_ = alphaimodp[level]
+	_ = betaioverqi[level]
+	_ = (*y0)[level]
+	_ = (*y1)[level]
+	_ = (*y2)[level]
+	_ = (*y3)[level]
+	_ = (*y4)[level]
+	_ = (*y5)[level]
+	_ = (*y6)[level]
+	_ = (*y7)[level]
+
+	qqip = alphaimodp[0]
+
+	rhi[0], rlo[0] = bits.Mul64(y0[0], qqip)
+	rhi[4], rlo[4] = bits.Mul64(y4[0], qqip)
+	rhi[1], rlo[1] = bits.Mul64(y1[0], qqip)
+	rhi[5], rlo[5] = bits.Mul64(y5[0], qqip)
+	rhi[2], rlo[2] = bits.Mul64(y2[0], qqip)
+	rhi[6], rlo[6] = bits.Mul64(y6[0], qqip)
+	rhi[3], rlo[3] = bits.Mul64(y3[0], qqip)
+	rhi[7], rlo[7] = bits.Mul64(y7[0], qqip)
+
+	// Accumulates the sum on uint128 and does a lazy montgomery reduction at the end
+	var mhi, mlo, c uint64
+	for i := 1; i < level+1; i++ {
+
+		qqip = alphaimodp[i]
+
+		mhi, mlo = bits.Mul64(y0[i], qqip)
+		rlo[0], c = bits.Add64(rlo[0], mlo, 0)
+		rhi[0] += mhi + c
+
+		mhi, mlo = bits.Mul64(y4[i], qqip)
+		rlo[4], c = bits.Add64(rlo[4], mlo, 0)
+		rhi[4] += mhi + c
+
+		mhi, mlo = bits.Mul64(y1[i], qqip)
+		rlo[1], c = bits.Add64(rlo[1], mlo, 0)
+		rhi[1] += mhi + c
+
+		mhi, mlo = bits.Mul64(y5[i], qqip)
+		rlo[5], c = bits.Add64(rlo[5], mlo, 0)
+		rhi[5] += mhi + c
+
+		mhi, mlo = bits.Mul64(y2[i], qqip)
+		rlo[2], c = bits.Add64(rlo[2], mlo, 0)
+		rhi[2] += mhi + c
+
+		mhi, mlo = bits.Mul64(y6[i], qqip)
+		rlo[6], c = bits.Add64(rlo[6], mlo, 0)
+		rhi[6] += mhi + c
+
+		mhi, mlo = bits.Mul64(y3[i], qqip)
+		rlo[3], c = bits.Add64(rlo[3], mlo, 0)
+		rhi[3] += mhi + c
+
+		mhi, mlo = bits.Mul64(y7[i], qqip)
+		rlo[7], c = bits.Add64(rlo[7], mlo, 0)
+		rhi[7] += mhi + c
+	}
+
+	var s [8]float64
+	for i := 0; i < level+1; i++ {
+
+		beta := betaioverqi[i]
+
+		s[0] = math.FMA(float64(y0[i]), beta, s[0])
+		s[4] = math.FMA(float64(y4[i]), beta, s[4])
+		s[1] = math.FMA(float64(y1[i]), beta, s[1])
+		s[5] = math.FMA(float64(y5[i]), beta, s[5])
+		s[2] = math.FMA(float64(y2[i]), beta, s[2])
+		s[6] = math.FMA(float64(y6[i]), beta, s[6])
+		s[3] = math.FMA(float64(y3[i]), beta, s[3])
+		s[7] = math.FMA(float64(y7[i]), beta, s[7])
+	}
+	var si [8]uint64
+	var s0 uint64
+
+	si[0] = uint64(s[0] + 0.5)
+	s0, _ = bits.Mul64(si[0], bredP)
+	si[0] = si[0] - s0*q
+
+	si[4] = uint64(s[4] + 0.5)
+	s0, _ = bits.Mul64(si[4], bredP)
+	si[4] = si[4] - s0*q
+
+	si[1] = uint64(s[1] + 0.5)
+	s0, _ = bits.Mul64(si[1], bredP)
+	si[1] = si[1] - s0*q
+
+	si[5] = uint64(s[5] + 0.5)
+	s0, _ = bits.Mul64(si[5], bredP)
+	si[5] = si[5] - s0*q
+
+	si[2] = uint64(s[2] + 0.5)
+	s0, _ = bits.Mul64(si[2], bredP)
+	si[2] = si[2] - s0*q
+
+	si[6] = uint64(s[6] + 0.5)
+	s0, _ = bits.Mul64(si[6], bredP)
+	si[6] = si[6] - s0*q
+
+	si[3] = uint64(s[3] + 0.5)
+	s0, _ = bits.Mul64(si[3], bredP)
+	si[3] = si[3] - s0*q
+
+	si[7] = uint64(s[7] + 0.5)
+	s0, _ = bits.Mul64(si[7], bredP)
+	si[7] = si[7] - s0*q
+
+	res[0] = uint32(montLazyAdd64(rhi[0], rlo[0], si[0], q, qInv))
+	res[4] = uint32(montLazyAdd64(rhi[4], rlo[4], si[4], q, qInv))
+	res[1] = uint32(montLazyAdd64(rhi[1], rlo[1], si[1], q, qInv))
+	res[5] = uint32(montLazyAdd64(rhi[5], rlo[5], si[5], q, qInv))
+	res[2] = uint32(montLazyAdd64(rhi[2], rlo[2], si[2], q, qInv))
+	res[6] = uint32(montLazyAdd64(rhi[6], rlo[6], si[6], q, qInv))
+	res[3] = uint32(montLazyAdd64(rhi[3], rlo[3], si[3], q, qInv))
+	res[7] = uint32(montLazyAdd64(rhi[7], rlo[7], si[7], q, qInv))
+}
+
+func montLazyAdd64(hi, lo, si, q, qInv uint64) uint64 {
+	// t = (lo * qInv) * q;  hhi = high64(t)
+	hhi, _ := bits.Mul64(lo*qInv, q)
+	x := hi - hhi + q + si
+	if x >= q {
+		x -= q
+	}
+	return x
+}
+
+func montLazyAdd32(hi, lo, si, q, qInv uint32) uint32 {
+	// t = (lo * qInv) * q;  hhi = high64(t)
+	hhi, _ := bits.Mul32(lo*qInv, q)
+	x := hi - hhi + q + si
+	if x >= q {
+		x -= q
+	}
+	return x
 }

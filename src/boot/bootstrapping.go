@@ -680,10 +680,10 @@ func (context *Context) SlotToCoeff2(ctreal, ctimage []*rlwe.Ciphertext) (result
 		util.Rescale_NonNTT(evaluator, result[i], result[i])
 	}
 
-	// for i := range result {
-	// 	ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
-	// 	ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
-	// }
+	for i := range result {
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[0], result[i].Value[0])
+		ringQ.AtLevel(result[i].Level()).NTT(result[i].Value[1], result[i].Value[1])
+	}
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
 		elapseThis += elapse

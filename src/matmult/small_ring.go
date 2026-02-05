@@ -8,7 +8,6 @@ import (
 
 	"github.com/tuneinsight/lattigo/v5/ring"
 	"github.com/tuneinsight/lattigo/v5/utils"
-	"github.com/tuneinsight/lattigo/v5/utils/bignum"
 )
 
 // Ring is a structure that keeps all the variables required to operate on a polynomial represented in this ring.
@@ -80,8 +79,8 @@ func (r Ring) MaxLevel() int {
 }
 
 // ModuliChain returns the list of primes in the modulus chain.
-func (r Ring) ModuliChain() (moduli []uint64) {
-	moduli = make([]uint64, len(r.SubRings))
+func (r Ring) ModuliChain() (moduli []uint32) {
+	moduli = make([]uint32, len(r.SubRings))
 	for i := range r.SubRings {
 		moduli[i] = r.SubRings[i].Modulus
 	}
@@ -117,7 +116,7 @@ func (r Ring) BRedConstants() (BRC [][]uint64) {
 	return
 }
 
-func NewRing(N int, Moduli []uint64) (r *Ring, err error) {
+func NewRing(N int, Moduli []uint32) (r *Ring, err error) {
 	r = new(Ring)
 	if len(Moduli) == 0 {
 		return nil, fmt.Errorf("invalid ModuliChain (must be a non-empty []uint64)")
@@ -129,11 +128,10 @@ func NewRing(N int, Moduli []uint64) (r *Ring, err error) {
 
 	// Computes bigQ for all levels
 	r.ModulusAtLevel = make([]*big.Int, len(Moduli))
-	r.ModulusAtLevel[0] = bignum.NewInt(Moduli[0])
+	r.ModulusAtLevel[0] = new(big.Int).SetUint64(uint64(Moduli[0]))
 	for i := 1; i < len(Moduli); i++ {
-		r.ModulusAtLevel[i] = new(big.Int).Mul(r.ModulusAtLevel[i-1], bignum.NewInt(Moduli[i]))
+		r.ModulusAtLevel[i] = new(big.Int).Mul(r.ModulusAtLevel[i-1], new(big.Int).SetUint64(uint64(Moduli[i])))
 	}
-
 	r.SubRings = make([]*SubRing, len(Moduli))
 
 	for i := range r.SubRings {
@@ -159,14 +157,14 @@ type SubRing struct {
 	N int
 
 	// Modulus
-	Modulus uint64
+	Modulus uint32
 
 	// Fast reduction constants
 	BRedConstant []uint64 // Barrett Reduction
 	MRedConstant uint64   // Montgomery Reduction
 }
 
-func NewSubRing(N int, Modulus uint64) (s *SubRing, err error) {
+func NewSubRing(N int, Modulus uint32) (s *SubRing, err error) {
 
 	s = &SubRing{}
 
@@ -175,12 +173,12 @@ func NewSubRing(N int, Modulus uint64) (s *SubRing, err error) {
 	s.Modulus = Modulus
 
 	// Computes the fast modular reduction constants for the Ring
-	s.BRedConstant = ring.BRedConstant(Modulus)
+	s.BRedConstant = ring.BRedConstant(uint64(Modulus))
 
 	// If qi is not a power of 2, we can compute the MRed (otherwise, it
 	// would return an error as there is no valid Montgomery form mod a power of 2)
 	if (Modulus&(Modulus-1)) != 0 && Modulus != 0 {
-		s.MRedConstant = ring.MRedConstant(Modulus)
+		s.MRedConstant = ring.MRedConstant(uint64(Modulus))
 	}
 
 	return
@@ -192,15 +190,18 @@ func rewRescaleConstants(subRings []*SubRing) (rescaleConstants [][]uint64) {
 
 	for j := len(subRings) - 1; j > 0; j-- {
 
-		qj := subRings[j].Modulus
+		qj := uint64(subRings[j].Modulus)
 
 		rescaleConstants[j-1] = make([]uint64, j)
 
 		for i := 0; i < j; i++ {
-			qi := subRings[i].Modulus
+			qi := uint64(subRings[i].Modulus)
 			rescaleConstants[j-1][i] = ring.MForm(qi-ring.ModExp(qj, qi-2, qi), qi, subRings[i].BRedConstant)
 		}
 	}
 
 	return
+}
+func (r *Ring) NewPoly() Poly {
+	return newPoly(r.N(), r.Level())
 }
