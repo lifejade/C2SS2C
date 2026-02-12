@@ -1,4 +1,4 @@
-// flint_wrap.c
+// wrap.c
 #include <flint/flint.h>
 #include <flint/nmod_mat.h>
 #include <stdlib.h>

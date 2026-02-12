@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lifejade/mm/src/matmult"
-	cwrappingflint "github.com/lifejade/mm/src/matmult/cwrapping_flint"
+	"github.com/lifejade/mm/src/matmult/cwrapping"
 	"github.com/tuneinsight/lattigo/v5/utils/sampling"
 )
 
@@ -75,7 +75,7 @@ func Test_BlasTime(t *testing.T) {
 				}
 			}
 		}
-		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, llen, llen, N, level)
+		cwrapping.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, llen, llen, N, level)
 
 		index = 0
 		for i := range level {
@@ -118,7 +118,7 @@ func Test_BlasTime(t *testing.T) {
 				}
 			}
 
-			cwrappingflint.Mult_mod_mat_Blas_Inplace2(u[i*llen*llen:(i+1)*llen*llen], buffer1, buffer2, llen, llen, N)
+			cwrapping.Mult_mod_mat_Blas_Inplace2(u[i*llen*llen:(i+1)*llen*llen], buffer1, buffer2, llen, llen, N)
 
 			index = 0
 			p := int64(P[i])

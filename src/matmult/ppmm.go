@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"sync"
 
-	cwrappingflint "github.com/lifejade/mm/src/matmult/cwrapping_flint"
+	"github.com/lifejade/mm/src/matmult/cwrapping"
 	"github.com/lifejade/mm/src/transpose"
 	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
@@ -377,7 +377,7 @@ func GenSFMat_CL3(params hefloat.Parameters, n int, SF_arr, SFI_arr []int) (SF_C
 			// 원래 코드: for j := range SF_arr[i] { ... idx++ }
 			// SF_arr[i]는 반복 횟수(또는 0이 아닌 요소의 개수)를 의미함
 			count := SF_arr[i]
-			mat := cwrappingflint.ComputeCombinedMat(n, idx, count, roots_complex, div, false)
+			mat := cwrapping.ComputeCombinedMat(n, idx, count, roots_complex, div, false)
 			SF_CL[i] = mat
 			idx += count
 		}
@@ -390,7 +390,7 @@ func GenSFMat_CL3(params hefloat.Parameters, n int, SF_arr, SFI_arr []int) (SF_C
 		idx := 0
 		for i := range SFI_CL {
 			count := SFI_arr[i]
-			mat := cwrappingflint.ComputeCombinedMat(n, idx, count, roots_complex, div, true)
+			mat := cwrapping.ComputeCombinedMat(n, idx, count, roots_complex, div, true)
 			SFI_CL[i] = mat
 			idx += count
 		}
@@ -663,8 +663,8 @@ func PPMM_Flint(cts []*rlwe.Ciphertext, u [][]uint64, params hefloat.Parameters,
 	CA := make([][][]uint64, level)
 	CB := make([][][]uint64, level)
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat(u, a[i], n, n, n, params.RingQ().AtLevel(i).Modulus().Uint64())
-		CB[i] = cwrappingflint.Mult_mod_mat(u, b[i], n, n, n, params.RingQ().AtLevel(i).Modulus().Uint64())
+		CA[i] = cwrapping.Mult_mod_mat(u, a[i], n, n, n, params.RingQ().AtLevel(i).Modulus().Uint64())
+		CB[i] = cwrapping.Mult_mod_mat(u, b[i], n, n, n, params.RingQ().AtLevel(i).Modulus().Uint64())
 	}
 
 	for i := range result {
@@ -703,8 +703,8 @@ func PPMM_Flint_CRT(cts []*rlwe.Ciphertext, u [][][]uint64, params hefloat.Param
 	CA := make([][][]uint64, level)
 	CB := make([][][]uint64, level)
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat(u[i], a[i], n, n, n, params.Q()[i])
-		CB[i] = cwrappingflint.Mult_mod_mat(u[i], b[i], n, n, n, params.Q()[i])
+		CA[i] = cwrapping.Mult_mod_mat(u[i], a[i], n, n, n, params.Q()[i])
+		CB[i] = cwrapping.Mult_mod_mat(u[i], b[i], n, n, n, params.Q()[i])
 	}
 
 	for i := range result {
@@ -743,8 +743,8 @@ func PPMM_Flint_CRT2(cts []*rlwe.Ciphertext, u [][][]uint64, n_a, n_b, n_c int, 
 	CA := make([][][]uint64, level)
 	CB := make([][][]uint64, level)
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat(u[i], a[i], n_a, n_b, n_c, params.Q()[i])
-		CB[i] = cwrappingflint.Mult_mod_mat(u[i], b[i], n_a, n_b, n_c, params.Q()[i])
+		CA[i] = cwrapping.Mult_mod_mat(u[i], a[i], n_a, n_b, n_c, params.Q()[i])
+		CB[i] = cwrapping.Mult_mod_mat(u[i], b[i], n_a, n_b, n_c, params.Q()[i])
 	}
 
 	for i := range result {
@@ -781,8 +781,8 @@ func PPMM_Flint_CRT3(cts []*rlwe.Ciphertext, u [][]uint64, n_a, n_b, n_c int, pa
 	CB := make([][][]uint64, level)
 	Q := params.Q()
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat2(u[i], a[i], n_a, n_b, n_c, Q[i])
-		CB[i] = cwrappingflint.Mult_mod_mat2(u[i], b[i], n_a, n_b, n_c, Q[i])
+		CA[i] = cwrapping.Mult_mod_mat2(u[i], a[i], n_a, n_b, n_c, Q[i])
+		CB[i] = cwrapping.Mult_mod_mat2(u[i], b[i], n_a, n_b, n_c, Q[i])
 	}
 
 	for i := range result {
@@ -809,7 +809,7 @@ func PPMM_Blas_CRT(cts []ring.Poly, u [][][]uint64, params hefloat.Parameters, n
 	CA := make([][][]uint64, level)
 	P := ringP.ModuliChain()
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat_Blas(u[i], a[i], n_a, n_b, n_c, P[i])
+		CA[i] = cwrapping.Mult_mod_mat_Blas(u[i], a[i], n_a, n_b, n_c, P[i])
 	}
 
 	for i := range n_a {
@@ -835,7 +835,7 @@ func PPMM_Blas_CRT_Inplace(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, level,
 			}
 		}
 
-		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+		cwrapping.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
 
 		index = 0
 		for i := range level {
@@ -868,7 +868,7 @@ func PPMM_Blas_CRT_Stride(cts [][]ring.Poly, u []float64, n_a, n_b, n_c, stpoint
 				}
 			}
 		}
-		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+		cwrapping.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
 
 		index = 0
 		for i := range level {
@@ -906,7 +906,7 @@ func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endp
 				index++
 			}
 		}
-		cwrappingflint.Mult_mod_mat_Blas_Inplace2(u[i*n_a*n_b:(i+1)*n_a*n_b], buffer1, buffer2, n_a, n_b, n_c)
+		cwrapping.Mult_mod_mat_Blas_Inplace2(u[i*n_a*n_b:(i+1)*n_a*n_b], buffer1, buffer2, n_a, n_b, n_c)
 
 		index = 0
 		p := int64(P[i])
@@ -938,7 +938,7 @@ func PPMM_Blas_CRT_Stride_LowMem(input []uint32, u []float64, n_a, n_b, n_c, stp
 			index++
 		}
 	}
-	cwrappingflint.Mult_mod_mat_Blas_Inplace2(u, buffer1, buffer2, n_a, n_b, n_c)
+	cwrapping.Mult_mod_mat_Blas_Inplace2(u, buffer1, buffer2, n_a, n_b, n_c)
 
 	index = 0
 	for j := range n_b {
@@ -971,7 +971,7 @@ func PPMM_Blas_CRTBarret(cts []ring.Poly, u [][][]uint64, params hefloat.Paramet
 	CA := make([][][]uint64, level)
 	P := ringP.ModuliChain()
 	for i := range level {
-		CA[i] = cwrappingflint.Mult_mod_mat_BlasBarret(u[i], a[i], n_a, n_b, n_c, P[i], bred[i])
+		CA[i] = cwrapping.Mult_mod_mat_BlasBarret(u[i], a[i], n_a, n_b, n_c, P[i], bred[i])
 	}
 
 	for i := range n_a {

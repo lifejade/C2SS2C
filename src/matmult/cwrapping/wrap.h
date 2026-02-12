@@ -1,4 +1,4 @@
-// flint_wrap.h
+// wrap.h
 #pragma once
 
 #ifdef __cplusplus

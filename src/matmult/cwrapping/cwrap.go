@@ -1,11 +1,11 @@
-package cwrappingflint
+package cwrapping
 
 /*
 #cgo pkg-config: flint, openblas
 #cgo CFLAGS:  -O2 -g -fopenmp
 #cgo LDFLAGS: -fopenmp -lpthread
 #include <stdlib.h>
-#include "flint_wrap.h"
+#include "wrap.h"
 */
 import "C"
 
