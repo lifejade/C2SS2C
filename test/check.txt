@@ -1,7 +1,0 @@
-ct gen start
-ct gen end
-init end
-all :  525.641559ms
-individual :  372.012513ms
-PASS
-ok  	github.com/lifejade/mm/test	80.213s
