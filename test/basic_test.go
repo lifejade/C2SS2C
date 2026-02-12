@@ -10,10 +10,12 @@ import (
 
 	"github.com/lifejade/mm/src/matmult"
 	"github.com/lifejade/mm/src/transpose"
+	"github.com/lifejade/mm/src/util"
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat/bootstrapping"
 	"github.com/tuneinsight/lattigo/v5/ring"
+	"github.com/tuneinsight/lattigo/v5/utils/sampling"
 
 	"time"
 )
@@ -1724,6 +1726,172 @@ func Test_Ringadd(t *testing.T) {
 	ptres := decryptor.DecryptNew(ct)
 	encoder.Decode(ptres, value)
 	fmt.Println(value[:20])
+}
+
+func Test_MulImag(t *testing.T) {
+
+	runtime.GOMAXPROCS(runtime.NumCPU()) // CPU 개수를 구한 뒤 사용할 최대 CPU 개수 설정
+	SchemeParams := hefloat.ParametersLiteral{
+		LogN:            15,
+		LogQ:            []int{48, 40, 40, 40, 40, 48, 48, 48, 48, 48, 48, 48, 48, 40, 40},
+		LogP:            []int{52, 52},
+		LogDefaultScale: 40,
+	}
+	params, _ := hefloat.NewParametersFromLiteral(SchemeParams)
+	kgen := rlwe.NewKeyGenerator(params)
+	sk := kgen.GenSecretKeyNew()
+
+	var pk *rlwe.PublicKey
+	var rlk *rlwe.RelinearizationKey
+	var rtk []*rlwe.GaloisKey
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+	galEls := make([]uint64, 1)
+	for i := range galEls {
+		galEls[i] = uint64(2*i + 1)
+	}
+	galEls = append(galEls, params.GaloisElementForComplexConjugation())
+	// for i := range ratio {
+	// 	k := N >> i
+	// 	galEls = append(galEls, uint64(k+1))
+	// }
+
+	rtk = make([]*rlwe.GaloisKey, len(galEls))
+	var wg sync.WaitGroup
+	wg.Add(len(galEls))
+	for i := range galEls {
+		i := i
+		go func() {
+			defer wg.Done()
+			kgen_ := rlwe.NewKeyGenerator(params)
+			rtk[i] = kgen_.GenGaloisKeyNew(galEls[i], sk)
+		}()
+	}
+	wg.Wait()
+
+	// // CoeffsToSlots parameters (homomorphic encoding)
+	// CoeffsToSlotsParameters := hefloat.DFTMatrixLiteral{
+	// 	Type:         hefloat.HomomorphicEncode,
+	// 	Format:       hefloat.RepackImagAsReal, // Returns the real and imaginary part into separate ciphertexts
+	// 	LogSlots:     params.LogMaxSlots(),
+	// 	LevelStart:   params.MaxLevel(),
+	// 	Levels:       []int{1, 1}, //qiCoeffsToSlots
+	// 	LogBSGSRatio: 0,
+	// }
+
+	// // Parameters of the homomorphic modular reduction x mod 1
+	// Mod1ParametersLiteral := hefloat.Mod1ParametersLiteral{
+	// 	LevelStart:      params.MaxLevel() - 2,
+	// 	LogScale:        48,                  // Matches qiEvalMod
+	// 	Mod1Type:        hefloat.CosDiscrete, // Multi-interval Chebyshev interpolation
+	// 	Mod1Degree:      24,                  // Depth 5
+	// 	DoubleAngle:     3,                   // Depth 3
+	// 	K:               8,                   // With EphemeralSecretWeight = 32 and 2^{15} slots, ensures < 2^{-138.7} failure probability
+	// 	LogMessageRatio: 8,                   // q/|m| = 2^10
+	// 	Mod1InvDegree:   0,                   // Depth 0
+	// }
+
+	// // SlotsToCoeffs parameters (homomorphic decoding)
+	// SlotsToCoeffsParameters := hefloat.DFTMatrixLiteral{
+	// 	Type:         hefloat.HomomorphicDecode,
+	// 	LogSlots:     params.LogMaxSlots(),
+	// 	LevelStart:   params.MaxLevel() - 10,
+	// 	Levels:       []int{1, 1}, // qiSlotsToCoeffs
+	// 	LogBSGSRatio: 0,
+	// }
+
+	// // Custom bootstrapping.Parameters.
+	// // All fields are public and can be manually instantiated.
+	// btpParams := bootstrapping.Parameters{
+	// 	ResidualParameters:      params,
+	// 	BootstrappingParameters: params,
+	// 	SlotsToCoeffsParameters: SlotsToCoeffsParameters,
+	// 	Mod1ParametersLiteral:   Mod1ParametersLiteral,
+	// 	CoeffsToSlotsParameters: CoeffsToSlotsParameters,
+	// 	EphemeralSecretWeight:   32, // > 128bit secure for LogN=16 and LogQP = 115.
+	// 	CircuitOrder:            bootstrapping.Custom,
+	// }
+
+	n := 1 << params.LogMaxSlots()
+
+	fmt.Println("generated bootstrapper end")
+	pk = kgen.GenPublicKeyNew(sk)
+	rlk = kgen.GenRelinearizationKeyNew(sk)
+
+	// generate keys - Rotating key
+
+	evk := rlwe.NewMemEvaluationKeySet(rlk, rtk...)
+	//generate -er
+	encryptor := rlwe.NewEncryptor(params, pk)
+	decryptor := rlwe.NewDecryptor(params, sk)
+	encoder := hefloat.NewEncoder(params)
+	evaluator := hefloat.NewEvaluator(params, evk)
+	_, _ = evaluator, decryptor
+
+	// btpevk, _, _ := btpParams.GenEvaluationKeys(sk)
+	// _ = decryptor
+	// _ = evaluator
+	// btp, err := bootstrapping.NewEvaluator(btpParams, btpevk)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	ringQ := params.RingQ()
+	_ = ringQ
+	var gk *rlwe.GaloisKey
+	var err error
+	galEl := params.GaloisElementOrderTwoOrthogonalSubgroup()
+	if gk, err = evaluator.CheckAndGetGaloisKey(galEl); err != nil {
+		if util.SContext.Sk == nil && !util.Debug.IsDebug {
+			panic(err)
+		}
+		util.Debug.AccTime += time.Since(util.Debug.StartTime)
+		kgen_ := rlwe.NewKeyGenerator(params)
+		gk = kgen_.GenGaloisKeyNew(galEl, util.SContext.Sk)
+		util.Debug.StartTime = time.Now()
+	}
+
+	// n := params.MaxSlots()
+	value := make([]complex128, n)
+	for i := range value {
+		value[i] = sampling.RandComplex128(-1, 1)
+	}
+	fmt.Println(value[:10])
+	fmt.Println()
+	plaintext := hefloat.NewPlaintext(params, params.MaxLevel())
+	encoder.Encode(value, plaintext)
+	ct, _ := encryptor.EncryptNew(plaintext)
+
+	// ct, _ = btp.Bootstrap(ct)
+	ringQ.INTT(ct.Value[0], ct.Value[0])
+	ringQ.INTT(ct.Value[1], ct.Value[1])
+	temp := ct.CopyNew()
+	ct.IsNTT = false
+	temp.IsNTT = false
+	transpose.Automorphism(evaluator, ringQ, ct, galEl, gk, temp)
+	ct.IsNTT = true
+	temp.IsNTT = true
+	evaluator.Add(ct, temp, ct)
+
+	ringQ.NTT(ct.Value[0], ct.Value[0])
+	ringQ.NTT(ct.Value[1], ct.Value[1])
+
+	// util.DebugPrec([]*rlwe.Ciphertext{ct}, params, encoder, decryptor, [][]float64{value}, 1, true)
+
+	value_res := make([]complex128, n)
+	ptres := decryptor.DecryptNew(ct)
+	encoder.Decode(ptres, value_res)
+	maxerr := 0.0
+	fmt.Println(value_res[:10])
+	for i := range n {
+		temp := (value_res[i] - (value[i] * 1i))
+		err := math.Sqrt(real(temp)*real(temp) + imag(temp)*imag(temp))
+		if err > maxerr {
+			maxerr = err
+		}
+	}
+	fmt.Println(-math.Log2(maxerr))
 }
 
 func multiply(n int, a, b []*[]uint64) []*[]uint64 {

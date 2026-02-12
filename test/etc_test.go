@@ -1,0 +1,143 @@
+package test
+
+import (
+	"fmt"
+	"runtime"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/lifejade/mm/src/matmult"
+	cwrappingflint "github.com/lifejade/mm/src/matmult/cwrapping_flint"
+	"github.com/tuneinsight/lattigo/v5/utils/sampling"
+)
+
+func Test_BlasTime(t *testing.T) {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+	P := []uint32{3422539, 3370361, 3231143, 3545881, 3577031, 3832931, 4064197, 3617099, 3651497, 3711319, 3439693, 3502001, 3555509, 3552013, 4031179, 4115407, 3167453, 3365393, 3291143, 3204973, 4182419, 3495781, 3315883, 3403391, 3529153, 3390899, 3453773, 3705469, 3180337, 4091993, 3503221, 3598949, 3822277, 3277853, 3547249, 3278053, 3696257, 3849409, 3725257, 3239449, 3730721, 3393619, 3361363, 3732997, 3661573, 3158971, 3516031, 3737039, 3882649, 3614969, 3518491, 3169759, 3326417, 4165333, 3853097, 3845357, 3721603, 3494831, 3255467, 3442987, 3381641, 4188433, 3960053, 3825473, 3269713, 3373781, 3403843, 4177609, 3265337, 3382231, 3342137, 3330179, 3272629, 3725357, 3667453, 3960049, 3435323, 3664249, 3632423, 3515269, 3784733, 3377657, 4064143, 3702119, 3835367, 3564937, 3507397, 3345877, 4169129, 3206783, 3397769, 4145293, 3773477, 3229319, 3161617, 3517427, 3456743, 3687163, 3389423, 3553541}
+	PLevel := 33
+	P = P[:PLevel+1]
+	N := 1 << 15
+
+	ringP, _ := matmult.NewRing(N, P)
+
+	L := 1 << 12
+	_ = L
+	llen := 1 << 6
+	fmt.Println("ct gen start")
+	var wg sync.WaitGroup
+	wg.Add(L)
+	polys := make([]matmult.Poly, L)
+	for i := range L {
+		go func() {
+			defer wg.Done()
+			polys[i] = ringP.NewPoly()
+			for l := range polys[i].Coeffs {
+				for j := range polys[i].Coeffs[l] {
+					polys[i].Coeffs[l][j] = uint32(sampling.RandUint64() % uint64(P[l]))
+				}
+			}
+		}()
+
+	}
+	wg.Wait()
+	fmt.Println("ct gen end")
+
+	res := make([]matmult.Poly, L)
+	for i := range L {
+		res[i] = ringP.NewPoly()
+	}
+
+	buffer1 := make([]float64, len(P)*llen*N)
+	buffer2 := make([]float64, len(P)*llen*N)
+	u := make([]float64, len(P)*llen*llen)
+	for i := range u {
+		u[i] = sampling.RandFloat64(1, 1000)
+	}
+	fmt.Println("init end")
+
+	runtime.GOMAXPROCS(1)
+	{
+		start := time.Now()
+		P := ringP.ModuliChain()
+		level := PLevel + 1
+		index := 0
+
+		stpoint := 0
+		stride := (L / llen) >> 1
+		for i := range level {
+			for j := range llen {
+				idx := stpoint + j*stride
+				coeff := polys[idx].Coeffs[i]
+				for k := range N {
+					buffer1[index] = float64(coeff[k])
+					index++
+				}
+			}
+		}
+		cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, llen, llen, N, level)
+
+		index = 0
+		for i := range level {
+			p := int64(P[i])
+			for j := range llen {
+				idx := stpoint + j*stride
+				coeff := res[idx].Coeffs[i]
+				for k := range N {
+					val := int64(buffer2[index]) % p
+					if val < 0 {
+						coeff[k] = uint32(val + p)
+					} else {
+						coeff[k] = uint32(val)
+					}
+					index++
+
+				}
+			}
+		}
+		elapse := time.Since(start)
+		fmt.Println("all : ", elapse)
+	}
+	buffer1 = make([]float64, llen*N)
+	buffer2 = make([]float64, llen*N)
+	{
+		start := time.Now()
+		P := ringP.ModuliChain()
+		level := PLevel + 1
+
+		stpoint := 0
+		stride := (L / llen) >> 1
+		for i := range level {
+			index := 0
+			for j := range llen {
+				idx := stpoint + j*stride
+				coeff := polys[idx].Coeffs[i]
+				for k := range N {
+					buffer1[index] = float64(coeff[k])
+					index++
+				}
+			}
+
+			cwrappingflint.Mult_mod_mat_Blas_Inplace2(u[i*llen*llen:(i+1)*llen*llen], buffer1, buffer2, llen, llen, N)
+
+			index = 0
+			p := int64(P[i])
+			for j := range llen {
+				idx := stpoint + j*stride
+				coeff := res[idx].Coeffs[i]
+				for k := range N {
+					val := int64(buffer2[index]) % p
+					if val < 0 {
+						coeff[k] = uint32(val + p)
+					} else {
+						coeff[k] = uint32(val)
+					}
+					index++
+
+				}
+			}
+		}
+		elapse := time.Since(start)
+		fmt.Println("individual : ", elapse)
+	}
+}

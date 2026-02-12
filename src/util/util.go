@@ -1,9 +1,11 @@
 package util
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"math/bits"
 	"os"
 	"runtime"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/tuneinsight/lattigo/v5/core/rlwe"
 	"github.com/tuneinsight/lattigo/v5/he/hefloat"
 	"github.com/tuneinsight/lattigo/v5/ring"
+	"github.com/tuneinsight/lattigo/v5/utils/bignum"
 )
 
 type DebugContext struct {
@@ -21,6 +24,10 @@ type DebugContext struct {
 }
 
 var Debug DebugContext
+
+type Val interface {
+	~float64 | ~complex128
+}
 
 type SecretContext struct {
 	Sk        *rlwe.SecretKey
@@ -101,6 +108,60 @@ func DebugCTS(cts []*rlwe.Ciphertext, params hefloat.Parameters, encoder *hefloa
 	fmt.Println("debug cts end")
 	fmt.Println("////////////////////////////////////////////////////////////////////////////////////")
 }
+
+func MulImag(eval *hefloat.Evaluator, op0 *rlwe.Ciphertext, opOut *rlwe.Ciphertext) (err error) {
+
+	_, level, err := eval.InitOutputUnaryOp(op0.El(), opOut.El())
+	if err != nil {
+		return fmt.Errorf("cannot Mul: %w", err)
+	}
+
+	opOut.Resize(op0.Degree(), level)
+
+	// Gets the ring at the target level
+	ringQ := eval.GetParameters().RingQ().AtLevel(level)
+
+	N := eval.GetParameters().N()
+	for i := range op0.Value {
+		// ringQ.MulDoubleRNSScalar(op0.Value[i], RNSReal, RNSImag, opOut.Value[i])
+		// ringQ.MulRNSScalarMontgomery(op0.Value[i], RNSReal, opOut.Value[i])
+		ringQ.MultByMonomial(op0.Value[i], N/2, op0.Value[i])
+	}
+
+	return nil
+}
+
+func bigComplexToRNSScalar(r *ring.Ring, cmplx *bignum.Complex) (RNSReal, RNSImag ring.RNSScalar) {
+
+	real := new(big.Int)
+	if cmplx[0] != nil {
+		r := cmplx[0]
+
+		if cmp := cmplx[0].Cmp(new(big.Float)); cmp > 0 {
+			r.Add(r, new(big.Float).SetFloat64(0.5))
+		} else if cmp < 0 {
+			r.Sub(r, new(big.Float).SetFloat64(0.5))
+		}
+
+		r.Int(real)
+	}
+
+	imag := new(big.Int)
+	if cmplx[1] != nil {
+		i := cmplx[1]
+
+		if cmp := cmplx[1].Cmp(new(big.Float)); cmp > 0 {
+			i.Add(i, new(big.Float).SetFloat64(0.5))
+		} else if cmp < 0 {
+			i.Sub(i, new(big.Float).SetFloat64(0.5))
+		}
+
+		i.Int(imag)
+	}
+
+	return r.NewRNSScalarFromBigint(real), r.NewRNSScalarFromBigint(imag)
+}
+
 func Mul_ScaleExact(eval *hefloat.Evaluator, op0 *rlwe.Ciphertext, op1 float64, opOut *rlwe.Ciphertext, scale rlwe.Scale) (err error) {
 
 	_, level, err := eval.InitOutputUnaryOp(op0.El(), opOut.El())
@@ -305,4 +366,91 @@ func CtZero(params hefloat.Parameters, encoder *hefloat.Encoder, encryptor *rlwe
 	encoder.Encode(value, pt)
 	ct, _ := encryptor.EncryptNew(pt)
 	return ct
+}
+
+func FindPrimes(startbit, bitlen, maxlogsize int) ([]uint32, bool) {
+	res := make([]uint32, 1)
+	isOverMax := false
+	var err error
+	if res[0], err = smallestPrimeInBitRange(startbit); err != nil {
+		res[0] = 0
+		return res, isOverMax
+	}
+	size := math.Log2(float64(res[0]))
+	value := res[0]
+
+	for true {
+		value += 2
+		iscoprime := true
+		for i := range res {
+			if gcd(res[i], value) != 1 {
+				iscoprime = false
+				break
+			}
+		}
+		if iscoprime {
+			size += math.Log2(float64(value))
+			res = append(res, value)
+		}
+		if size > float64(maxlogsize) {
+			isOverMax = true
+			break
+		}
+		if bits.Len32(value) > bitlen {
+			break
+		}
+	}
+	return res, isOverMax
+}
+
+func smallestPrimeInBitRange(n int) (uint32, error) {
+	if n < 2 || n >= 32 {
+		return 0, errors.New("n must satisfy 2 <= n < 32")
+	}
+
+	start := uint32(1) << (n - 1)
+	end := uint32(1) << n
+
+	// ensure odd (except for 2)
+	if start > 2 && start%2 == 0 {
+		start++
+	}
+
+	for x := start; x < end; x += 2 {
+		if isPrime(x) {
+			return x, nil
+		}
+	}
+
+	return 0, errors.New("no prime found in range")
+}
+func isPrime(x uint32) bool {
+	if x < 2 {
+		return false
+	}
+	if x == 2 {
+		return true
+	}
+	if x%2 == 0 {
+		return false
+	}
+	for i := uint32(3); i*i <= x; i += 2 {
+		if x%i == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func gcd(a, b uint32) uint32 {
+	if a < 0 {
+		a = -a
+	}
+	if b < 0 {
+		b = -b
+	}
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }

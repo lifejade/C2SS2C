@@ -23,11 +23,29 @@ type Context struct {
 	SparseN int
 	P       []uint32
 
-	C2SParams *MatmultParams
-	S2CParams *MatmultParams
+	C2SParams     *MatmultParams
+	S2CParams     *MatmultParams
+	EvalModParams *EvalModParams
 
-	alloced  *preAlloced
-	isLowMem bool
+	alloced *preAlloced
+}
+
+type ContextLiteral struct {
+	params    hefloat.Parameters
+	Encoder   *hefloat.Encoder
+	Encryptor *rlwe.Encryptor
+	Evaluator *hefloat.Evaluator
+
+	N       int
+	SparseN int
+	P       []uint32
+}
+
+type EvalModParams struct {
+	params EvalModParamsLiteral
+}
+type EvalModParamsLiteral struct {
+	H int
 }
 type MatmultParams struct {
 	params MatmultParamsLiteral
@@ -50,7 +68,7 @@ type preAlloced struct {
 	ringP *matmult.Ring
 	be    *matmult.BasisExtender
 
-	ctzero *rlwe.Ciphertext
+	cttemp *rlwe.Ciphertext
 
 	work []*rlwe.Ciphertext
 	aux  []*rlwe.Ciphertext
@@ -71,7 +89,15 @@ type preAlloced struct {
 	resPolys [][]matmult.Poly
 }
 
-func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
+func InitContext(contextparams ContextLiteral, CTS, STC MatmultParamsLiteral, EvalMod EvalModParamsLiteral) (context *Context) {
+	params := contextparams.params
+	Encoder := contextparams.Encoder
+	Encryptor := contextparams.Encryptor
+	N := contextparams.N
+	sparseN := contextparams.SparseN
+	evaluator := contextparams.Evaluator
+	P := contextparams.P
+
 	context = &Context{
 		params:    params,
 		Encoder:   Encoder,
@@ -80,16 +106,17 @@ func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor 
 		SparseN:   sparseN,
 		Evaluator: evaluator,
 		P:         P,
-		isLowMem:  false,
 	}
 	if util.Debug.IsDebug {
 		fmt.Println("pre allocate start")
 		util.Debug.StartTime = time.Now()
 	}
 	context.ContextPreAlloc()
-	SF, SFI := matmult.GenSFMat_CL2(params, sparseN>>1, STCParams.CL_arr, CTSParams.CL_arr)
-	context.S2CParams = context.GenMatParams(STCParams, SF, true)
-	context.C2SParams = context.GenMatParams(CTSParams, SFI, false)
+	util.PrintMemUsage()
+	SF, SFI := matmult.GenSFMat_CL2(params, sparseN>>1, STC.CL_arr, CTS.CL_arr)
+	context.S2CParams = context.GenMatParams(STC, SF, true)
+	context.C2SParams = context.GenMatParams(CTS, SFI, false)
+	context.EvalModParams = context.GenEvalModParams(EvalMod)
 	if util.Debug.IsDebug {
 		elapse := time.Since(util.Debug.StartTime)
 		fmt.Println("pre allocate end : ", elapse)
@@ -98,94 +125,97 @@ func InitContext(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor 
 	return context
 }
 
-func InitContextLowMem(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
-	context = &Context{
-		params:    params,
-		Encoder:   Encoder,
-		Encryptor: Encryptor,
-		N:         N,
-		SparseN:   sparseN,
-		Evaluator: evaluator,
-		P:         P,
-		isLowMem:  true,
-	}
-	if util.Debug.IsDebug {
-		fmt.Println("pre allocate start")
-		util.Debug.StartTime = time.Now()
-	}
-	context.ContextPreAlloc()
-	SF, SFI := matmult.GenSFMat_CL2(params, sparseN>>1, STCParams.CL_arr, CTSParams.CL_arr)
-	context.S2CParams = context.GenMatParams(STCParams, SF, true)
-	context.C2SParams = context.GenMatParams(CTSParams, SFI, false)
-	if util.Debug.IsDebug {
-		elapse := time.Since(util.Debug.StartTime)
-		fmt.Println("pre allocate end : ", elapse)
-		util.PrintMemUsage()
-	}
-	return context
+func (context *Context) GenEvalModParams(EvalMod EvalModParamsLiteral) *EvalModParams {
+
+	return nil
 }
+
+// func InitContextLowMem(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
+// 	context = &Context{
+// 		params:    params,
+// 		Encoder:   Encoder,
+// 		Encryptor: Encryptor,
+// 		N:         N,
+// 		SparseN:   sparseN,
+// 		Evaluator: evaluator,
+// 		P:         P,
+// 		isLowMem:  true,
+// 	}
+// 	if util.Debug.IsDebug {
+// 		fmt.Println("pre allocate start")
+// 		util.Debug.StartTime = time.Now()
+// 	}
+// 	context.ContextPreAlloc()
+// 	SF, SFI := matmult.GenSFMat_CL2(params, sparseN>>1, STCParams.CL_arr, CTSParams.CL_arr)
+// 	context.S2CParams = context.GenMatParams(STCParams, SF, true)
+// 	context.C2SParams = context.GenMatParams(CTSParams, SFI, false)
+// 	if util.Debug.IsDebug {
+// 		elapse := time.Since(util.Debug.StartTime)
+// 		fmt.Println("pre allocate end : ", elapse)
+// 		util.PrintMemUsage()
+// 	}
+// 	return context
+// }
 
 func (context *Context) ContextPreAlloc() {
 	params := context.params
 	encoder := context.Encoder
 	encryptor := context.Encryptor
 	N := context.N
-	sparseN := context.SparseN
+	// sparseN := context.SparseN
 	P := context.P
 	ringQ := params.RingQ()
 	ringP, _ := matmult.NewRing(N, P)
 
-	inputPolys := make([][]matmult.Poly, 2)
-	for i := range inputPolys {
-		inputPolys[i] = make([]matmult.Poly, sparseN)
-		for j := range inputPolys[i] {
-			inputPolys[i][j] = ringP.NewPoly()
-		}
-	}
-	resPolys := make([][]matmult.Poly, 2)
-	for i := range 2 {
-		resPolys[i] = make([]matmult.Poly, sparseN)
-		for j := range sparseN {
-			resPolys[i][j] = ringP.NewPoly()
-		}
-	}
+	// inputPolys := make([][]matmult.Poly, 2)
+	// for i := range inputPolys {
+	// 	inputPolys[i] = make([]matmult.Poly, sparseN)
+	// 	for j := range inputPolys[i] {
+	// 		inputPolys[i][j] = ringP.NewPoly()
+	// 	}
+	// }
+	// resPolys := make([][]matmult.Poly, 2)
+	// for i := range 2 {
+	// 	resPolys[i] = make([]matmult.Poly, sparseN)
+	// 	for j := range sparseN {
+	// 		resPolys[i][j] = ringP.NewPoly()
+	// 	}
+	// }
 
 	ctzero := util.CtZero(params, encoder, encryptor)
-	var realPolys, imagPolys, tempPolys []matmult.Poly
+	// var realPolys, imagPolys, tempPolys []matmult.Poly
 	// var realbuffer, imagbuffer, tempbuffer []uint32
-	if !context.isLowMem {
-		realPolys = make([]matmult.Poly, sparseN/2)
-		imagPolys = make([]matmult.Poly, sparseN/2)
-		tempPolys = make([]matmult.Poly, sparseN/2)
-		for j := range sparseN / 2 {
-			realPolys[j] = ringP.NewPoly()
-			imagPolys[j] = ringP.NewPoly()
-			tempPolys[j] = ringP.NewPoly()
-		}
-	}
+	// realPolys = make([]matmult.Poly, sparseN/2)
+	// imagPolys = make([]matmult.Poly, sparseN/2)
+	// tempPolys = make([]matmult.Poly, sparseN/2)
+	// for j := range sparseN / 2 {
+	// 	realPolys[j] = ringP.NewPoly()
+	// 	imagPolys[j] = ringP.NewPoly()
+	// 	tempPolys[j] = ringP.NewPoly()
+	// }
 
-	work := make([]*rlwe.Ciphertext, sparseN)
-	for i := range work {
-		work[i] = ctzero.CopyNew()
-	}
-	aux := make([]*rlwe.Ciphertext, sparseN)
-	for i := range aux {
-		aux[i] = ctzero.CopyNew()
-	}
+	// work := make([]*rlwe.Ciphertext, sparseN)
+	// for i := range work {
+	// 	work[i] = ctzero.CopyNew()
+	// }
+	// aux := make([]*rlwe.Ciphertext, sparseN)
+	// for i := range aux {
+	// 	aux[i] = ctzero.CopyNew()
+	// }
 
 	alloc := new(preAlloced)
 	alloc.ringQ = ringQ
 	alloc.ringP = ringP
 	alloc.be = matmult.NewBasisExtender(ringQ, ringP, nil, nil)
-	alloc.inputPolys = inputPolys
-	alloc.realPolys = realPolys
-	alloc.imagPolys = imagPolys
-	alloc.tempPolys = tempPolys
-	alloc.resPolys = resPolys
+	// alloc.inputPolys = inputPolys
+	// alloc.realPolys = realPolys
+	// alloc.imagPolys = imagPolys
+	// alloc.tempPolys = tempPolys
+	// alloc.resPolys = resPolys
 
-	alloc.work = work
-	alloc.aux = aux
-	alloc.ctzero = ctzero
+	// alloc.work = work
+	// alloc.aux = aux
+	alloc.cttemp = ctzero
 
 	context.alloced = alloc
 
@@ -208,7 +238,7 @@ func (context *Context) GenMatParams(param MatmultParamsLiteral, mat [][][]compl
 	n := sparseN >> 1
 
 	scaling_ := big.NewFloat(C2Scaling)
-	scaling_.Mul(scaling_, new(big.Float).SetFloat64(1/float64(sparseN)))
+	// scaling_.Mul(scaling_, new(big.Float).SetFloat64(1/float64(sparseN)))
 	if !isSF {
 		scaling_.Mul(scaling_, new(big.Float).SetFloat64(1/float64(sparseN)))
 	}
@@ -370,8 +400,8 @@ func (context *Context) GenMatParams(param MatmultParamsLiteral, mat [][][]compl
 	N := context.N
 
 	if len(context.alloced.ppmmbuffer1) < len(P)*maxllen*N {
-		context.alloced.ppmmbuffer1 = make([]float64, len(P)*maxllen*N)
-		context.alloced.ppmmbuffer2 = make([]float64, len(P)*maxllen*N)
+		context.alloced.ppmmbuffer1 = make([]float64, maxllen*N)
+		context.alloced.ppmmbuffer2 = make([]float64, maxllen*N)
 		// fmt.Println("ppmmbuffer len : ", len(context.alloced.ppmmbuffer1))
 	}
 

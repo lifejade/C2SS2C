@@ -1185,7 +1185,7 @@ func Test_TransSparse(t *testing.T) {
 	_, _, _, _ = encoder, encryptor, decryptor, evaluator
 
 	value := make([]float64, n)
-	ratio := 8
+	ratio := 4
 	sparseN := n / ratio
 	for i := range value {
 		if i%ratio != 0 {
@@ -1222,7 +1222,8 @@ func Test_TransSparse(t *testing.T) {
 		aux[i] = ctzero.CopyNew()
 	}
 	starttime = time.Now()
-	Transpose_Sparse(cts, params, evaluator, ringQ, n, sparseN, work, aux, cts)
+	// cts = Transpose2(cts, params, evaluator, n)
+	Transpose3(cts, params, evaluator, ringQ, n, sparseN, work, aux, cts)
 	// for i := range work {
 	// 	work[i] = ctzero.CopyNew()
 	// 	aux[i] = ctzero.CopyNew()
@@ -1236,9 +1237,9 @@ func Test_TransSparse(t *testing.T) {
 		reval[i] = make([]float64, n)
 		ringQ.NTT(cts[i].Value[0], cts[i].Value[0])
 		ringQ.NTT(cts[i].Value[1], cts[i].Value[1])
-		evaluator.Mul(cts[i], 1.0/float64(sparseN), cts[i])
 		// evaluator.Mul(cts[i], 1.0/float64(sparseN), cts[i])
-		evaluator.Rescale(cts[i], cts[i])
+		// evaluator.Mul(cts[i], 1.0/float64(sparseN), cts[i])
+		// evaluator.Rescale(cts[i], cts[i])
 
 		dept := decryptor.DecryptNew(cts[i])
 		err := encoder.Decode(dept, reval[i])

@@ -185,8 +185,8 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 	fmt.Println("mult by monomial", elapse)
 
 	starttime = time.Now()
-	aux := cts
-	// aux := Tweak3(cts, params, eval, ringQ, n)
+	// aux := cts
+	aux := Tweak3(cts, params, eval, ringQ, n)
 	elapse = time.Since(starttime)
 	fmt.Println("TWEAK", elapse)
 
@@ -198,7 +198,7 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 		if !ch {
 			fmt.Println("err ", i, " ", idx)
 		}
-		res[i] = aux[(idx-1)/2]
+		res[i] = aux[(idx-1)/2].CopyNew()
 
 		// ringQ.INTT(res[i].Value[0], res[i].Value[0])
 		// ringQ.INTT(res[i].Value[1], res[i].Value[1])
@@ -215,7 +215,7 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 		res[i].IsNTT = false
 
 		//uint64(2*i+1)
-		if err := eval.Automorphism(res[i], uint64(21), res[i]); err != nil {
+		if err := eval.Automorphism(res[i], uint64(2*i+1), res[i]); err != nil {
 			fmt.Println(err)
 		}
 		res[i].IsNTT = true
@@ -252,7 +252,7 @@ func Transpose2(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 }
 
 func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, N, sparseN int, work, aux, res []*rlwe.Ciphertext) {
-
+	var elapseThis time.Duration
 	ninv := ringQ.NewRNSScalarFromUInt64(uint64(sparseN))
 	ringQ.MFormRNSScalar(ninv, ninv)
 	ringQ.Inverse(ninv)
@@ -271,7 +271,9 @@ func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 	}
 
 	Tweak4(inputs, params, eval, ringQ, sparseN, work, 0, aux, 0)
-	// var err error
+	fmt.Println("TweakAfterMem")
+	util.PrintMemUsage()
+	var err error
 	for i := range res {
 		res[i] = aux[(idxarr[i]-1)/2].CopyNew()
 
@@ -284,19 +286,23 @@ func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 		ringQ.IMForm(res[i].Value[0], res[i].Value[0])
 		ringQ.IMForm(res[i].Value[1], res[i].Value[1])
 
-		res[i].IsNTT = false
-		// ringQ.NTT(res[i].Value[0], res[i].Value[0])
-		// ringQ.NTT(res[i].Value[1], res[i].Value[1])
-
+		// res[i] = aux[(idxarr[i]-1)/2].CopyNew()
 		galEl := uint64((2*i + 1))
-		// var gk *rlwe.GaloisKey
-		// if gk, err = eval.CheckAndGetGaloisKey(galEl); err != nil {
-		// 	panic(err)
-		// }
-		eval.Automorphism(res[i], galEl, res[i])
-
-		// ringQ.INTT(res[i].Value[0], res[i].Value[0])
-		// ringQ.INTT(res[i].Value[1], res[i].Value[1])
+		var gk *rlwe.GaloisKey
+		if gk, err = eval.CheckAndGetGaloisKey(galEl); err != nil {
+			if util.SContext.Sk == nil && !util.Debug.IsDebug {
+				panic(err)
+			}
+			elapse := time.Since(util.Debug.StartTime)
+			elapseThis += elapse
+			galEl := uint64((2*i + 1))
+			kgen_ := rlwe.NewKeyGenerator(params)
+			// gk := kgen_.GenGaloisKeyNew(galEl, sk)
+			gk = kgen_.GenGaloisKeyNew(galEl, util.SContext.Sk)
+			util.Debug.StartTime = time.Now()
+		}
+		res[i].IsNTT = false
+		Automorphism(eval, ringQ.AtLevel(inputs[i].Level()), res[i], galEl, gk, res[i])
 		res[i].IsNTT = true
 
 	}
@@ -314,7 +320,12 @@ func Transpose3(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefl
 		}
 		res[(sparseN-idx)%(sparseN)] = aux[idx].CopyNew()
 	}
-
+	if util.Debug.IsDebug {
+		elapse := time.Since(util.Debug.StartTime)
+		elapseThis += elapse
+		util.Debug.AccTime += elapseThis
+		util.Debug.StartTime = time.Now()
+	}
 }
 
 func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval *hefloat.Evaluator, ringQ *ring.Ring, N, sparseN int, work, aux, res []*rlwe.Ciphertext) {
@@ -338,6 +349,7 @@ func Transpose_Sparse(inputs []*rlwe.Ciphertext, params hefloat.Parameters, eval
 	for i := range res {
 		res[i] = aux[(idxarr[i]-1)/2].CopyNew()
 		galEl := uint64((2*i + 1))
+
 		var gk *rlwe.GaloisKey
 		if gk, err = eval.CheckAndGetGaloisKey(galEl); err != nil {
 			if util.SContext.Sk == nil && !util.Debug.IsDebug {

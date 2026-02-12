@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"testing"
+
+	"github.com/lifejade/mm/src/util"
 )
 
 // FindNTTPrime returns the first prime p of bitLen bits such that
@@ -172,4 +174,10 @@ func Test_Prime3(t *testing.T) {
 	Q := FindNTTPrime3(logQ, modulus, 0, 50)
 	fmt.Println(Q)
 	fmt.Println(len(Q))
+}
+
+func Test_FindCoPrimes(t *testing.T) {
+	res, check := util.FindPrimes(22, 22, 1000)
+	fmt.Println(res)
+	fmt.Println(check)
 }

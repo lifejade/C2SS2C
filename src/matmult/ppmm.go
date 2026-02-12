@@ -895,8 +895,9 @@ func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endp
 	P := ringP.ModuliChain()
 	_ = P
 	level = level + 1
-	index := 0
+
 	for i := range level {
+		index := 0
 		for j := range n_b {
 			idx := stpoint + j*stride
 			coeff := cts[idx].Coeffs[i]
@@ -905,11 +906,9 @@ func PPMM_Blas_CRT_Stride2(cts []Poly, u []float64, n_a, n_b, n_c, stpoint, endp
 				index++
 			}
 		}
-	}
-	cwrappingflint.Mult_mod_mat_Blas_Inplace(u, buffer1, buffer2, n_a, n_b, n_c, level)
+		cwrappingflint.Mult_mod_mat_Blas_Inplace2(u[i*n_a*n_b:(i+1)*n_a*n_b], buffer1, buffer2, n_a, n_b, n_c)
 
-	index = 0
-	for i := range level {
+		index = 0
 		p := int64(P[i])
 		for j := range n_b {
 			idx := endpoint + j*stride
