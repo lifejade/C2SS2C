@@ -278,23 +278,23 @@ func Test_CoeffToSlotBench(t *testing.T) {
 
 	for _, v := range sparses {
 		sparseN := 1 << v
-		// ratio := N / sparseN
+		ratio := N / sparseN
 		// context := InitContext(params, encoder, encryptor, N, sparseN, evaluator, P, MatmultParamsLiteral{}, MatmultParamsLiteral{})
-		// util.SContext.Values = make([][]float64, sparseN)
-		// for i := range util.SContext.Values {
-		// 	util.SContext.Values[i] = make([]float64, N)
-		// }
-		//ct generation
+		util.SContext.Values = make([][]float64, sparseN)
+		for i := range util.SContext.Values {
+			util.SContext.Values[i] = make([]float64, N)
+		}
+		// ct generation
 
-		// values_arr := make([][]float64, sparseN)
-		// for j := range values_arr {
-		// 	values_arr[j] = make([]float64, N)
-		// 	for i := range values_arr[j] {
-		// 		if i%ratio == 0 {
-		// 			values_arr[j][i] = sampling.RandFloat64(-1, 1)
-		// 		}
-		// 	}
-		// }
+		values_arr := make([][]float64, sparseN)
+		for j := range values_arr {
+			values_arr[j] = make([]float64, N)
+			for i := range values_arr[j] {
+				if i%ratio == 0 {
+					values_arr[j][i] = sampling.RandFloat64(-1, 1)
+				}
+			}
+		}
 
 		cts := make([]*rlwe.Ciphertext, sparseN)
 		wg.Add(sparseN)
@@ -325,19 +325,19 @@ func Test_CoeffToSlotBench(t *testing.T) {
 		util.PrintMemUsage()
 		// context.ModUp(cts, cts)
 		// ModUp(cts, params, encoder, encryptor, evaluator, N, sparseN, 32, cts)
-		// for i := range cts {
-		// 	vals := make([]float64, N)
-		// 	cttmp := cts[i].CopyNew()
-		// 	params.RingQ().AtLevel(cttmp.Level()).NTT(cttmp.Value[0], cttmp.Value[0])
-		// 	params.RingQ().AtLevel(cttmp.Level()).NTT(cttmp.Value[1], cttmp.Value[1])
+		for i := range cts {
+			vals := make([]float64, N)
+			cttmp := cts[i].CopyNew()
+			params.RingQ().AtLevel(cttmp.Level()).NTT(cttmp.Value[0], cttmp.Value[0])
+			params.RingQ().AtLevel(cttmp.Level()).NTT(cttmp.Value[1], cttmp.Value[1])
 
-		// 	ptres := decryptor.DecryptNew(cttmp)
-		// 	encoder.Decode(ptres, vals)
+			ptres := decryptor.DecryptNew(cttmp)
+			encoder.Decode(ptres, vals)
 
-		// 	for j := range vals {
-		// 		util.SContext.Values[i][j] = vals[j]
-		// 	}
-		// }
+			for j := range vals {
+				util.SContext.Values[i][j] = vals[j]
+			}
+		}
 
 		for idx, cl := range lenCL {
 			if cl > v-1 {

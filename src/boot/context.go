@@ -130,91 +130,64 @@ func (context *Context) GenEvalModParams(EvalMod EvalModParamsLiteral) *EvalModP
 	return nil
 }
 
-// func InitContextLowMem(params hefloat.Parameters, Encoder *hefloat.Encoder, Encryptor *rlwe.Encryptor, N, sparseN int, evaluator *hefloat.Evaluator, P []uint32, CTSParams, STCParams MatmultParamsLiteral) (context *Context) {
-// 	context = &Context{
-// 		params:    params,
-// 		Encoder:   Encoder,
-// 		Encryptor: Encryptor,
-// 		N:         N,
-// 		SparseN:   sparseN,
-// 		Evaluator: evaluator,
-// 		P:         P,
-// 		isLowMem:  true,
-// 	}
-// 	if util.Debug.IsDebug {
-// 		fmt.Println("pre allocate start")
-// 		util.Debug.StartTime = time.Now()
-// 	}
-// 	context.ContextPreAlloc()
-// 	SF, SFI := matmult.GenSFMat_CL2(params, sparseN>>1, STCParams.CL_arr, CTSParams.CL_arr)
-// 	context.S2CParams = context.GenMatParams(STCParams, SF, true)
-// 	context.C2SParams = context.GenMatParams(CTSParams, SFI, false)
-// 	if util.Debug.IsDebug {
-// 		elapse := time.Since(util.Debug.StartTime)
-// 		fmt.Println("pre allocate end : ", elapse)
-// 		util.PrintMemUsage()
-// 	}
-// 	return context
-// }
-
 func (context *Context) ContextPreAlloc() {
 	params := context.params
 	encoder := context.Encoder
 	encryptor := context.Encryptor
 	N := context.N
-	// sparseN := context.SparseN
+	sparseN := context.SparseN
 	P := context.P
 	ringQ := params.RingQ()
 	ringP, _ := matmult.NewRing(N, P)
 
-	// inputPolys := make([][]matmult.Poly, 2)
-	// for i := range inputPolys {
-	// 	inputPolys[i] = make([]matmult.Poly, sparseN)
-	// 	for j := range inputPolys[i] {
-	// 		inputPolys[i][j] = ringP.NewPoly()
-	// 	}
-	// }
-	// resPolys := make([][]matmult.Poly, 2)
-	// for i := range 2 {
-	// 	resPolys[i] = make([]matmult.Poly, sparseN)
-	// 	for j := range sparseN {
-	// 		resPolys[i][j] = ringP.NewPoly()
-	// 	}
-	// }
+	inputPolys := make([][]matmult.Poly, 2)
+	for i := range inputPolys {
+		inputPolys[i] = make([]matmult.Poly, sparseN)
+		for j := range inputPolys[i] {
+			inputPolys[i][j] = ringP.NewPoly()
+		}
+	}
+	resPolys := make([][]matmult.Poly, 2)
+	for i := range 2 {
+		resPolys[i] = make([]matmult.Poly, sparseN)
+		for j := range sparseN {
+			resPolys[i][j] = ringP.NewPoly()
+		}
+	}
 
 	ctzero := util.CtZero(params, encoder, encryptor)
-	// var realPolys, imagPolys, tempPolys []matmult.Poly
+	var realPolys, imagPolys, tempPolys []matmult.Poly
 	// var realbuffer, imagbuffer, tempbuffer []uint32
-	// realPolys = make([]matmult.Poly, sparseN/2)
-	// imagPolys = make([]matmult.Poly, sparseN/2)
-	// tempPolys = make([]matmult.Poly, sparseN/2)
-	// for j := range sparseN / 2 {
-	// 	realPolys[j] = ringP.NewPoly()
-	// 	imagPolys[j] = ringP.NewPoly()
-	// 	tempPolys[j] = ringP.NewPoly()
-	// }
+	realPolys = make([]matmult.Poly, sparseN/2)
+	imagPolys = make([]matmult.Poly, sparseN/2)
+	tempPolys = make([]matmult.Poly, sparseN/2)
+	for j := range sparseN / 2 {
+		realPolys[j] = ringP.NewPoly()
+		imagPolys[j] = ringP.NewPoly()
+		tempPolys[j] = ringP.NewPoly()
+	}
 
-	// work := make([]*rlwe.Ciphertext, sparseN)
-	// for i := range work {
-	// 	work[i] = ctzero.CopyNew()
-	// }
-	// aux := make([]*rlwe.Ciphertext, sparseN)
-	// for i := range aux {
-	// 	aux[i] = ctzero.CopyNew()
-	// }
+	work := make([]*rlwe.Ciphertext, sparseN)
+	for i := range work {
+		work[i] = ctzero.CopyNew()
+	}
+	aux := make([]*rlwe.Ciphertext, sparseN)
+	for i := range aux {
+		aux[i] = ctzero.CopyNew()
+	}
 
 	alloc := new(preAlloced)
 	alloc.ringQ = ringQ
 	alloc.ringP = ringP
 	alloc.be = matmult.NewBasisExtender(ringQ, ringP, nil, nil)
-	// alloc.inputPolys = inputPolys
-	// alloc.realPolys = realPolys
-	// alloc.imagPolys = imagPolys
-	// alloc.tempPolys = tempPolys
-	// alloc.resPolys = resPolys
+	alloc.inputPolys = inputPolys
+	alloc.realPolys = realPolys
+	alloc.imagPolys = imagPolys
+	alloc.tempPolys = tempPolys
+	alloc.resPolys = resPolys
 
-	// alloc.work = work
-	// alloc.aux = aux
+	alloc.work = work
+	alloc.aux = aux
 	alloc.cttemp = ctzero
 
 	context.alloced = alloc
